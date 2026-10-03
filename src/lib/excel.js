@@ -2,12 +2,11 @@
  * excel.js
  * Excel upload handling for the Crown Leave Form app.
  *
- * Uses the `xlsx` package (SheetJS). It is imported lazily inside parseFile()
- * so the pure helpers (detectColumns, normalizeDate) can be used without the
- * heavy dependency being loaded.
+ * Uses the `xlsx` package (SheetJS), imported statically so Vite bundles it.
+ * (A lazy `import('xlsx')` via a variable breaks Vite's static analysis and
+ * leaves a bare-specifier dynamic import that fails at runtime in the browser.)
  */
-
-const SHEETJS_MODULE = 'xlsx';
+import * as XLSX from 'xlsx';
 
 /**
  * Read an uploaded file (.xlsx / .xls / .csv) and return its first sheet as
@@ -15,7 +14,6 @@ const SHEETJS_MODULE = 'xlsx';
  * Rows are objects keyed by the (trimmed) header names; empty cells become ''.
  */
 export async function parseFile(file) {
-  const XLSX = await import(SHEETJS_MODULE);
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
