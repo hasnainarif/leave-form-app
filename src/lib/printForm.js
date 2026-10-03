@@ -73,7 +73,7 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
   <div class="clf-top">
     <div class="clf-logo">${logoBlock(logoDataUrl)}</div>
     <div class="clf-head">
-      <div class="clf-company">کراؤن ٹیکسٹائل (<span class="clf-nowrap">لانڈھی یونٹ</span>)</div>
+      <div class="clf-company">کراؤن ٹیکسٹائل (<span class="clf-nowrap">لانڈ‍ھی یونٹ</span>)</div>
       <div class="clf-title">درخواست برائے چھٹی</div>
     </div>
   </div>
@@ -142,50 +142,50 @@ export function formStyles() {
   .clf-form {
     width: 48%; flex: 0 0 48%; height: 100%;
     display: flex; flex-direction: column;
-    border: 2px solid #000; padding: 6px 12px 8px;
-    direction: rtl; text-align: right; line-height: 2.1; font-size: 12px;
+    border: 2px solid #000; padding: 8px 14px 10px;
+    direction: rtl; text-align: right; line-height: 2.25; font-size: 14px;
     background: #fff; color: #000;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .clf-preview .clf-form { width: 100%; flex: none; height: auto; }
   .clf-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   .clf-head { flex: 1; text-align: center; }
-  .clf-company { font-weight: 700; font-size: 14px; }
+  .clf-company { font-weight: 700; font-size: 16px; }
   .clf-nowrap { white-space: nowrap; }
-  .clf-title { font-weight: 700; font-size: 16px; margin: 2px 0 4px; }
+  .clf-title { font-weight: 700; font-size: 19px; margin: 3px 0 5px; }
   .clf-logo { flex: 0 0 auto; }
-  .clf-logoimg { width: 52px; height: 52px; object-fit: contain; }
+  .clf-logoimg { width: 62px; height: 62px; object-fit: contain; }
   .clf-logofallback {
     border: 1.5px solid #000; font-size: 9px; font-weight: 700;
     text-align: center; padding: 3px 8px; line-height: 1.5; direction: ltr;
   }
-  .clf-row { display: flex; gap: 12px; margin: 1px 0; }
+  .clf-row { display: flex; gap: 12px; margin: 3px 0; }
   .clf-field { flex: 1; display: flex; align-items: flex-end; gap: 6px; min-width: 0; }
-  .clf-label { white-space: nowrap; font-size: 11.5px; }
+  .clf-label { white-space: nowrap; font-size: 13px; }
   .clf-val {
-    flex: 1; border-bottom: 1px dotted #000; min-height: 1.55em;
-    font-size: 12.5px; padding: 0 6px;
+    flex: 1; border-bottom: 1px solid #000; min-height: 1.6em;
+    font-size: 14px; padding: 0 6px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .clf-qty { flex: 0 1 56px; text-align: center; }
-  .clf-types { display: flex; justify-content: center; gap: 28px; margin: 6px 0 2px; }
-  .clf-type { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+  .clf-types { display: flex; justify-content: center; gap: 32px; margin: 8px 0 4px; }
+  .clf-type { display: flex; align-items: center; gap: 8px; font-size: 14px; }
   .clf-box {
-    width: 14px; height: 14px; border: 1.5px solid #000;
+    width: 16px; height: 16px; border: 1.5px solid #000;
     display: inline-flex; align-items: center; justify-content: center;
   }
   .clf-tick { font-size: 20px; font-weight: 900; line-height: 1; font-family: Arial, sans-serif; }
-  .clf-signs { display: flex; gap: 8px; margin-top: 4px; flex: 1 0 auto; }
+  .clf-signs { display: flex; gap: 10px; margin-top: 8px; flex: 1 0 auto; }
   .clf-sig { flex: 1; text-align: center; display: flex; flex-direction: column; }
-  .clf-sigimgbox { flex: 1; min-height: 70px; display: flex; align-items: flex-end; justify-content: center; }
+  .clf-sigimgbox { flex: 1; min-height: 90px; display: flex; align-items: flex-end; justify-content: center; }
   .clf-sigimg { max-height: 66px; max-width: 90%; object-fit: contain; }
   .clf-sigline { border-top: 1px solid #000; margin: 0 10px; }
-  .clf-siglabel { font-size: 10.5px; padding-top: 2px; }
-  .clf-office { border: 1.5px solid #000; margin-top: 6px; padding: 3px 8px 6px; }
-  .clf-office-title { text-align: center; font-weight: 700; font-size: 11px; }
+  .clf-siglabel { font-size: 12px; padding-top: 3px; }
+  .clf-office { border: 1.5px solid #000; margin-top: 10px; padding: 5px 10px 8px; }
+  .clf-office-title { text-align: center; font-weight: 700; font-size: 13px; }
   .clf-office-cols { display: flex; gap: 8px; margin-top: 3px; }
-  .clf-obox { flex: 1; border: 1px solid #000; padding: 1px 8px 5px; font-size: 10.5px; }
-  .clf-obhead { font-weight: 700; text-align: center; font-size: 11px; }
+  .clf-obox { flex: 1; border: 1px solid #000; padding: 3px 10px 7px; font-size: 12px; }
+  .clf-obhead { font-weight: 700; text-align: center; font-size: 13px; }
   .clf-orow { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }
   .clf-obox-check { width: 30px; height: 16px; border: 1px solid #000; display: inline-block; }
   @media screen and (max-width: 760px) {

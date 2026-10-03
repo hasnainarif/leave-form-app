@@ -31,11 +31,10 @@ function safeRenderForm(data, placements, logoDataUrl) {
   }
 }
 
-// No official Crown logo is available (crowntexpk.com is dead, no verifiable
-// official logo found), so public/crown-logo.png does not ship with the app.
-// This tries to fetch it anyway (respecting the vite base path) and turns it
-// into a data URL for renderForm; on any failure it stays null and renderForm
-// renders the styled Urdu text fallback instead.
+// Crown logo (public/crown-logo.png, cleaned from the user's paper form).
+// Fetched respecting the vite base path and turned into a data URL so the
+// downloaded printable file stays self-contained. On any failure it stays
+// null and renderForm renders the styled Urdu text fallback instead.
 function useLogoDataUrl() {
   const [logoDataUrl, setLogoDataUrl] = useState(null);
   useEffect(() => {

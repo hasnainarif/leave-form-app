@@ -43,7 +43,27 @@ const emptyDraft = () => ({
   value: '',
 });
 
-export default function SignatureManager({ signatures = [], onChange = () => {} }) {
+// Plain-language summary so the user can SEE which sign goes where and when:
+// "konsa sign kab use hoga" — position decides the line on the form,
+// the rule decides which forms. Empty rule = every form.
+function describeSig(sig) {
+  const pos =
+    (POSITIONS.find((p) => p.value === (sig.position || 'dept_head')) || {}).label ||
+    'Department Head';
+  const needle = String(sig.conditionValue || sig.value || '').trim();
+  if (!needle) return `${pos} ki line par lagega, har form par.`;
+  const field =
+    (CONDITION_FIELDS.find((f) => f.value === (sig.conditionField || sig.field)) || {})
+      .label || 'Department';
+  const opText = (sig.conditionOp || sig.op) === 'equals' ? 'ke barabar ho' : 'contain karta ho';
+  return `${pos} ki line par lagega, sirf jab ${field} "${needle}" ${opText}.`;
+}
+
+export default function SignatureManager({
+  signatures = [],
+  onChange = () => {},
+  defaultHrSignUrl = null,
+}) {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(emptyDraft());
@@ -115,6 +135,38 @@ export default function SignatureManager({ signatures = [], onChange = () => {} 
     }
   };
 
+  // Replace the bundled default HR signature with the user's own upload.
+  // The new signature gets position 'hr' and an empty rule (every form).
+  const saveHrReplacement = async (file) => {
+    if (!file || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const base = {
+        label: 'HR Manager',
+        position: 'hr',
+        conditionField: 'department',
+        conditionOp: 'contains',
+        conditionValue: '',
+      };
+      let sig;
+      if (isConfigured()) {
+        const imageUrl = await uploadSignatureImage(file);
+        const saved = await upsertSignature({ ...base, imageUrl });
+        sig = saved || { ...base, id: 'local-' + Date.now(), imageUrl };
+      } else {
+        sig = { ...base, id: 'local-' + Date.now(), imageUrl: URL.createObjectURL(file) };
+      }
+      onChange([...signatures, sig]);
+    } catch (e) {
+      setError('Replace nahi ho saka. Dobara try karein.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const customHr = (signatures || []).find((s) => s.position === 'hr');
+
   const persistSig = async (sig) => {
     if (!isConfigured()) return;
     setBusyId(sig.id);
@@ -150,8 +202,46 @@ export default function SignatureManager({ signatures = [], onChange = () => {} 
   return (
     <div style={s.wrap}>
       <h3 style={s.h3}>Signatures</h3>
+      <p style={s.explainer}>
+        Har sign ke liye 2 cheezein batayein: <b>Position</b> (form par kis line par
+        lagega) aur <b>Rule</b> (kab lagega). Rule khaali ho to wo sign har form par
+        lagega. Neeche har sign ke saath wazeh likha hai ke wo kab use hoga.
+      </p>
       {notice && <div style={s.notice}>{notice}</div>}
       {error && <div style={s.error}>{error}</div>}
+
+      {/* Default HR signature (bundled, common to every form, replaceable) */}
+      {!customHr && defaultHrSignUrl && (
+        <div style={s.card}>
+          <div style={s.row}>
+            <img src={defaultHrSignUrl} alt="Default HR signature" style={s.thumb} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: 'var(--clf-text)' }}>
+                HR Manager<span style={s.badge}>Default</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--clf-text-dim)', marginTop: 4 }}>
+                Ye HR ka sign hai, sab forms me common lagega.
+              </div>
+            </div>
+          </div>
+          <div style={s.ruleLine}>ایچ آر مینیجر ki line par lagega, har form par.</div>
+          <div style={s.btnRow}>
+            <label style={{ ...s.smallBtn, textAlign: 'center' }}>
+              {saving ? 'Saving...' : 'Replace karein (naya sign upload karein)'}
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  if (f) saveHrReplacement(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* New signature */}
       <div style={s.card}>
@@ -219,6 +309,7 @@ export default function SignatureManager({ signatures = [], onChange = () => {} 
             onChange={(e) => setDraft({ ...draft, value: e.target.value })}
           />
         </div>
+        <div style={s.ruleLine}>{describeSig(draft)}</div>
         <button style={s.primaryBtn} onClick={saveNew} disabled={!draft.file || saving}>
           {saving ? 'Saving...' : 'Signature save karein'}
         </button>
@@ -287,6 +378,7 @@ export default function SignatureManager({ signatures = [], onChange = () => {} 
                 onChange={(e) => updateSig(sig.id, { conditionValue: e.target.value })}
               />
             </div>
+            <div style={s.ruleLine}>{describeSig(sig)}</div>
             <div style={s.btnRow}>
               <button
                 style={s.smallBtn}
@@ -400,4 +492,26 @@ const s = {
   },
   dangerBtn: { background: 'var(--clf-surface)', borderColor: 'var(--clf-error-border)', color: '#c0392b' },
   muted: { fontSize: 14, color: 'var(--clf-text-dim)', textAlign: 'center', marginTop: 16 },
+  ruleLine: {
+    marginTop: 10,
+    padding: '8px 10px',
+    borderRadius: 8,
+    background: 'var(--clf-chip-bg)',
+    border: '1px solid var(--clf-chip-border)',
+    color: 'var(--clf-chip-text)',
+    fontSize: 13,
+    lineHeight: 1.5,
+  },
+  badge: {
+    display: 'inline-block',
+    fontSize: 11,
+    fontWeight: 700,
+    padding: '2px 8px',
+    borderRadius: 999,
+    background: 'var(--clf-chip-bg)',
+    border: '1px solid var(--clf-chip-border)',
+    color: 'var(--clf-chip-text)',
+    marginLeft: 6,
+  },
+  explainer: { fontSize: 13, color: 'var(--clf-text-dim)', lineHeight: 1.6, margin: '0 0 12px' },
 };

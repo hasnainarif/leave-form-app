@@ -64,6 +64,37 @@ function resolvePlacements(form, signatures) {
     }));
 }
 
+// Bundled default HR signature (extracted from the user's paper form).
+// It is common to EVERY form unless the user uploads their own HR-position
+// signature, which takes precedence. Fully replaceable from the
+// SignatureManager screen.
+function useDefaultHrSignUrl() {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(import.meta.env.BASE_URL + 'hr-sign.png');
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        if (alive && typeof dataUrl === 'string') setUrl(dataUrl);
+      } catch (e) {
+        // keep null; HR line simply stays blank
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return url;
+}
+
 // Transliterate every raw row, then optionally run Gemini smart-fix in batches.
 // Any smart-fix failure falls back silently to the local transliteration.
 // opts: { apiKey, smartFixOn, month, year } — month/year apply to bare
@@ -188,6 +219,7 @@ export default function App() {
   });
   const [signatures, setSignatures] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const defaultHrSignUrl = useDefaultHrSignUrl();
 
   // The register's month/year. Bare day numbers (18/19/20) in the sheet
   // belong to THIS month, never silently to "today".
@@ -342,11 +374,22 @@ export default function App() {
         ...f,
         leaveDate: leaveDate ? fmt(leaveDate) : '',
         toDate: toDate ? fmt(toDate) : '',
-        sigPlacements: resolvePlacements(f, signatures),
+        sigPlacements: (() => {
+          const placements = resolvePlacements(f, signatures);
+          // Default HR signature is common to every form. A user-uploaded
+          // HR-position signature takes precedence when present.
+          if (
+            defaultHrSignUrl &&
+            !placements.some((p) => p.position === 'hrManager')
+          ) {
+            placements.push({ imageUrl: defaultHrSignUrl, position: 'hrManager' });
+          }
+          return placements;
+        })(),
         _valid: !!leaveDate,
       };
     });
-  }, [forms, signatures, holidays]);
+  }, [forms, signatures, holidays, defaultHrSignUrl]);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -448,7 +491,11 @@ export default function App() {
 
         {step === 2 && (
           <div className="space-y-6">
-            <SignatureManager signatures={signatures} onChange={setSignatures} />
+            <SignatureManager
+              signatures={signatures}
+              onChange={setSignatures}
+              defaultHrSignUrl={defaultHrSignUrl}
+            />
             <Settings
               apiKey={apiKey}
               onApiKey={handleApiKey}
