@@ -3,7 +3,12 @@ import { parseFile, detectColumns } from '../lib/excel.js';
 
 const ACCEPT = '.xlsx,.xls,.csv';
 
-export default function Upload({ onParsed }) {
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+export default function Upload({ onParsed, month, year, onMonthYear }) {
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -40,12 +45,47 @@ export default function Upload({ onParsed }) {
     }
   };
 
+  const years = [];
+  const thisYear = new Date().getFullYear();
+  for (let y = thisYear - 2; y <= thisYear + 2; y++) years.push(y);
+
   return (
-    <section className="rounded-lg bg-white p-4 shadow-sm sm:p-8">
+    <section className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900 sm:p-8">
       <h2 className="text-lg font-semibold">Excel file upload karein</h2>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
         Sick leave register wali file yahan dein. .xlsx, .xls ya .csv sab chalenge.
       </p>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Ye register kis month ka hai?
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Date column me sirf din likha ho (jaise 18, 19, 20) to usi month ka samjha jayega.
+        </p>
+        <div className="mt-2 flex gap-2">
+          <select
+            value={month}
+            onChange={(e) => onMonthYear && onMonthYear(Number(e.target.value), year)}
+            className="min-h-[44px] flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900"
+            aria-label="Register ka month"
+          >
+            {MONTH_NAMES.map((name, i) => (
+              <option key={name} value={i + 1}>{name}</option>
+            ))}
+          </select>
+          <select
+            value={year}
+            onChange={(e) => onMonthYear && onMonthYear(month, Number(e.target.value))}
+            className="min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900"
+            aria-label="Register ka saal"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       <div
         role="button"
@@ -73,11 +113,11 @@ export default function Upload({ onParsed }) {
         className={
           'mt-4 cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition sm:p-12 ' +
           (dragOver
-            ? 'border-emerald-600 bg-emerald-50'
-            : 'border-slate-300 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50/50')
+            ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950'
+            : 'border-slate-300 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50/50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-emerald-950/40')
         }
       >
-        <p className="text-lg font-semibold text-slate-700">File chunein ya yahan drop karein</p>
+        <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">File chunein ya yahan drop karein</p>
         <p className="mt-1 text-sm text-slate-500">Phone se bhi file select ho jayegi.</p>
         <input
           ref={inputRef}

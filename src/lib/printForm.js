@@ -124,30 +124,11 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
 }
 
 /**
- * Build a complete self-contained printable HTML document from rendered
- * forms. formsHTML is the concatenated output of renderForm() calls
- * (each begins with the <!--clf-form--> marker). Forms are paired into
- * A4 landscape pages, two per page.
+ * The complete form stylesheet. Exported so the app's on-screen preview can
+ * inject the exact same styles.
  */
-export function buildPrintableDocument(formsHTML) {
-  const forms = String(formsHTML || '')
-    .split('<!--clf-form-->')
-    .map((f) => f.trim())
-    .filter(Boolean);
-
-  let pages = '';
-  for (let i = 0; i < forms.length; i += 2) {
-    const pair = forms[i] + (forms[i + 1] ? `\n${forms[i + 1]}` : '');
-    pages += `<div class="clf-page">${pair}</div>\n`;
-  }
-
-  return `<!DOCTYPE html>
-<html lang="ur" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Leave Forms - Crown Textile</title>
-<style>
+export function formStyles() {
+  return `
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; color: #000; }
   body { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif; }
@@ -155,14 +136,18 @@ export function buildPrintableDocument(formsHTML) {
   .clf-page {
     display: flex; gap: 6mm; direction: rtl;
     page-break-after: always; break-after: page;
+    height: 192mm;
   }
   .clf-page:last-child { page-break-after: auto; break-after: auto; }
   .clf-form {
-    width: 48%; flex: 0 0 48%;
+    width: 48%; flex: 0 0 48%; height: 100%;
+    display: flex; flex-direction: column;
     border: 2px solid #000; padding: 6px 12px 8px;
     direction: rtl; text-align: right; line-height: 2.1; font-size: 12px;
+    background: #fff; color: #000;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
+  .clf-preview .clf-form { width: 100%; flex: none; height: auto; }
   .clf-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   .clf-head { flex: 1; text-align: center; }
   .clf-company { font-weight: 700; font-size: 14px; }
@@ -190,9 +175,9 @@ export function buildPrintableDocument(formsHTML) {
     display: inline-flex; align-items: center; justify-content: center;
   }
   .clf-tick { font-size: 20px; font-weight: 900; line-height: 1; font-family: Arial, sans-serif; }
-  .clf-signs { display: flex; gap: 8px; margin-top: 4px; }
-  .clf-sig { flex: 1; text-align: center; }
-  .clf-sigimgbox { min-height: 70px; display: flex; align-items: flex-end; justify-content: center; }
+  .clf-signs { display: flex; gap: 8px; margin-top: 4px; flex: 1 0 auto; }
+  .clf-sig { flex: 1; text-align: center; display: flex; flex-direction: column; }
+  .clf-sigimgbox { flex: 1; min-height: 70px; display: flex; align-items: flex-end; justify-content: center; }
   .clf-sigimg { max-height: 66px; max-width: 90%; object-fit: contain; }
   .clf-sigline { border-top: 1px solid #000; margin: 0 10px; }
   .clf-siglabel { font-size: 10.5px; padding-top: 2px; }
@@ -203,11 +188,42 @@ export function buildPrintableDocument(formsHTML) {
   .clf-obhead { font-weight: 700; text-align: center; font-size: 11px; }
   .clf-orow { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }
   .clf-obox-check { width: 30px; height: 16px; border: 1px solid #000; display: inline-block; }
+  @media screen and (max-width: 760px) {
+    .clf-page { flex-direction: column; height: auto; }
+    .clf-form { width: 100%; flex: none; height: auto; margin-bottom: 6mm; }
+  }
   @media print {
     body { background: #fff; }
     .clf-page { box-shadow: none; padding: 0; margin: 0; }
   }
-</style>
+`;
+}
+
+/**
+ * Build a complete self-contained printable HTML document from rendered
+ * forms. formsHTML is the concatenated output of renderForm() calls
+ * (each begins with the <!--clf-form--> marker). Forms are paired into
+ * A4 landscape pages, two per page.
+ */
+export function buildPrintableDocument(formsHTML) {
+  const forms = String(formsHTML || '')
+    .split('<!--clf-form-->')
+    .map((f) => f.trim())
+    .filter(Boolean);
+
+  let pages = '';
+  for (let i = 0; i < forms.length; i += 2) {
+    const pair = forms[i] + (forms[i + 1] ? `\n${forms[i + 1]}` : '');
+    pages += `<div class="clf-page">${pair}</div>\n`;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leave Forms - Crown Textile</title>
+<style>${formStyles()}</style>
 </head>
 <body>
 ${pages}

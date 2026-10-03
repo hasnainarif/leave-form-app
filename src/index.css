@@ -1,7 +1,55 @@
 @import "tailwindcss";
 
+/* Dark mode is class-based (toggled on <html>), not media-based. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* App surfaces for the inline-styled components (SignatureManager, Settings).
+   The printed leave forms always stay black-on-white. */
+:root {
+  --clf-surface: #ffffff;
+  --clf-surface-soft: #f8fafc;
+  --clf-text: #0f172a;
+  --clf-text-dim: #64748b;
+  --clf-text-faint: #94a3b8;
+  --clf-border: #e5e7eb;
+  --clf-input-bg: #ffffff;
+  --clf-input-border: #cbd5e1;
+  --clf-notice-bg: #fff7e6;
+  --clf-notice-border: #f0c96a;
+  --clf-notice-text: #7a5b16;
+  --clf-error-bg: #fdecec;
+  --clf-error-border: #f3a3a3;
+  --clf-error-text: #a33;
+  --clf-chip-bg: #eef2ff;
+  --clf-chip-border: #c7d2fe;
+  --clf-chip-text: #3730a3;
+}
+.dark {
+  --clf-surface: #0f172a;
+  --clf-surface-soft: #1e293b;
+  --clf-text: #f1f5f9;
+  --clf-text-dim: #94a3b8;
+  --clf-text-faint: #64748b;
+  --clf-border: #334155;
+  --clf-input-bg: #1e293b;
+  --clf-input-border: #475569;
+  --clf-notice-bg: #451a03;
+  --clf-notice-border: #92400e;
+  --clf-notice-text: #fcd34d;
+  --clf-error-bg: #450a0a;
+  --clf-error-border: #991b1b;
+  --clf-error-text: #fca5a5;
+  --clf-chip-bg: #1e1b4b;
+  --clf-chip-border: #4338ca;
+  --clf-chip-text: #c7d2fe;
 }
 
 body {

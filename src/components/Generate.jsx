@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { renderForm, buildPrintableDocument } from '../lib/printForm.js';
+import { renderForm, buildPrintableDocument, formStyles } from '../lib/printForm.js';
 
 // Shape handed to renderForm. The app form (see App.jsx) carries Urdu text
 // fields + pre-formatted leaveDate/toDate; renderForm expects the paper-form
 // field names (workerNo, upperDateStr, leaveDateStr, quantity, leaveType),
 // so the adaptation happens here in one place.
+// upperDateStr is the NEXT WORKING DAY after the leave date (f.toDate),
+// falling back to the leave date itself when unavailable.
 function toFormData(f) {
   const leaveDateStr = f.leaveDate || '';
   return {
@@ -13,7 +15,7 @@ function toFormData(f) {
     father: f.father || '',
     designation: f.designation || '',
     department: f.department || '',
-    upperDateStr: leaveDateStr,
+    upperDateStr: f.toDate || leaveDateStr,
     leaveDateStr,
     quantity: '1',
     reason: f.reason || '',
@@ -105,7 +107,7 @@ function ScaledPreview({ html }) {
   return (
     <div
       ref={outerRef}
-      className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-white"
+      className="clf-preview relative w-full overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
       style={{ height: boxH || undefined }}
     >
       <div
@@ -137,9 +139,9 @@ export default function Generate({ forms, signatures, onPrint, onDownload, onBac
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+      <section className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900 sm:p-6">
         <h2 className="text-lg font-semibold">Print preview</h2>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           {valid.length} form tayyar {valid.length === 1 ? 'hai' : 'hain'}.
           {signedCount > 0 && ruleCount > 0
             ? ' ' + signedCount + ' form par dastakhat lagen ge.'
@@ -162,18 +164,18 @@ export default function Generate({ forms, signatures, onPrint, onDownload, onBac
           <button
             onClick={() => onDownload(docHTML)}
             disabled={valid.length === 0}
-            className="rounded-lg border border-emerald-600 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-emerald-600 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950"
           >
             Download printable file
           </button>
           <button
             onClick={onBack}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Back
           </button>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
           Print dabane par A4 landscape layout khulega. Wahan Save as PDF chun kar
           PDF bhi bana sakte hain. Download wali file ko baad mein bhi khol kar
           print kiya ja sakta hai.
@@ -181,11 +183,12 @@ export default function Generate({ forms, signatures, onPrint, onDownload, onBac
       </section>
 
       {valid.length === 0 ? (
-        <p className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow-sm">
+        <p className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
           Koi printable form nahi hai.
         </p>
       ) : (
         <div className="space-y-4">
+          <style>{formStyles()}</style>
           {formsHTML.map((html, i) => (
             <ScaledPreview key={(valid[i] && valid[i].id) || i} html={html} />
           ))}

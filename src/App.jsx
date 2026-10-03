@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Upload from './components/Upload.jsx';
 import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
@@ -31,12 +31,6 @@ function englishFromRow(row, mapping) {
     eng[f] = h && row[h] != null ? String(row[h]).trim() : '';
   }
   return eng;
-}
-
-function addOneDay(d) {
-  const c = new Date(d.getTime());
-  c.setDate(c.getDate() + 1);
-  return c;
 }
 
 // Evaluate each signature's rule against the ENGLISH row values.
@@ -72,12 +66,14 @@ function resolvePlacements(form, signatures) {
 
 // Transliterate every raw row, then optionally run Gemini smart-fix in batches.
 // Any smart-fix failure falls back silently to the local transliteration.
+// opts: { apiKey, smartFixOn, month, year } — month/year apply to bare
+// day-number dates in the sheet (the register's month).
 async function buildForms(rawRows, mapping, opts) {
-  const { apiKey, smartFixOn } = opts || {};
+  const { apiKey, smartFixOn, month, year } = opts || {};
   const forms = rawRows.map((row) => {
     let t = {};
     try {
-      t = transliterateRow(row, mapping) || {};
+      t = transliterateRow(row, mapping, { month, year }) || {};
     } catch (e) {
       t = {};
     }
@@ -193,6 +189,28 @@ export default function App() {
   const [signatures, setSignatures] = useState([]);
   const [holidays, setHolidays] = useState([]);
 
+  // The register's month/year. Bare day numbers (18/19/20) in the sheet
+  // belong to THIS month, never silently to "today".
+  const [sheetMonth, setSheetMonth] = useState(() => new Date().getMonth() + 1);
+  const [sheetYear, setSheetYear] = useState(() => new Date().getFullYear());
+
+  // Dark mode for the app UI (the printed forms always stay black-on-white).
+  const [dark, setDark] = useState(() => {
+    try {
+      return localStorage.getItem('crown-leave-theme') === 'dark';
+    } catch (e) {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      document.documentElement.classList.toggle('dark', dark);
+      localStorage.setItem('crown-leave-theme', dark ? 'dark' : 'light');
+    } catch (e) {
+      // ignore
+    }
+  }, [dark]);
+
   // Row data (this is the only thing a new upload refreshes).
   const [headers, setHeaders] = useState([]);
   const [mapping, setMapping] = useState(null);
@@ -235,7 +253,12 @@ export default function App() {
     setBusy(true);
     setBusyMsg('File parh li. Urdu tayyar ki ja rahi hai...');
     try {
-      const built = await buildForms(rows, useMapping, { apiKey, smartFixOn });
+      const built = await buildForms(rows, useMapping, {
+        apiKey,
+        smartFixOn,
+        month: sheetMonth,
+        year: sheetYear,
+      });
       setHeaders(headers);
       setMapping(useMapping);
       setForms(built);
@@ -256,8 +279,40 @@ export default function App() {
     setBusyMsg('Column mapping update ho rahi hai...');
     try {
       const rawRows = forms.map((f) => f._raw).filter(Boolean);
-      const rebuilt = await buildForms(rawRows, newMapping, { apiKey: '', smartFixOn: false });
+      const rebuilt = await buildForms(rawRows, newMapping, {
+        apiKey: '',
+        smartFixOn: false,
+        month: sheetMonth,
+        year: sheetYear,
+      });
       setForms(rebuilt);
+    } finally {
+      setBusy(false);
+      setBusyMsg('');
+    }
+  };
+
+  // Re-run Gemini smart fix on the ALREADY-UPLOADED rows with the current
+  // key/toggle — no re-upload needed. This is the prominent "Gemini se Urdu
+  // theek karwain" action shown on the Review step. Any failure keeps the
+  // local Urdu values untouched.
+  const rerunSmartFix = async () => {
+    const rawRows = forms.map((f) => f._raw).filter(Boolean);
+    if (!rawRows.length) return;
+    setError('');
+    setBusy(true);
+    setBusyMsg('Gemini se naam aur department Urdu me theek kiye ja rahe hain...');
+    handleSmartFix(true);
+    try {
+      const rebuilt = await buildForms(rawRows, mapping || {}, {
+        apiKey,
+        smartFixOn: true,
+        month: sheetMonth,
+        year: sheetYear,
+      });
+      setForms(rebuilt);
+    } catch (e) {
+      setError('Smart fix nahi chal saka. Local Urdu wali values mehfooz hain.');
     } finally {
       setBusy(false);
       setBusyMsg('');
@@ -276,7 +331,10 @@ export default function App() {
       }
       let toDate = null;
       try {
-        toDate = leaveDate ? nextWorkingDay(addOneDay(leaveDate), holidays || []) : null;
+        // The upper date is the first working day AFTER the leave date.
+        // nextWorkingDay() already advances one day internally and skips
+        // Sundays + confirmed public holidays (Sundays must be remembered).
+        toDate = leaveDate ? nextWorkingDay(leaveDate, holidays || []) : null;
       } catch (e) {
         toDate = null;
       }
@@ -291,11 +349,20 @@ export default function App() {
   }, [forms, signatures, holidays]);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="no-print bg-emerald-700 text-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <h1 className="text-xl font-bold sm:text-2xl">Crown Leave Form App</h1>
-          <p className="text-sm text-emerald-100">Chutti ke form banayein, sign karein, print karein.</p>
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header className="no-print bg-emerald-700 text-white dark:bg-emerald-900">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
+          <div>
+            <h1 className="text-xl font-bold sm:text-2xl">Crown Leave Form App</h1>
+            <p className="text-sm text-emerald-100 dark:text-emerald-200">Chutti ke form banayein, sign karein, print karein.</p>
+          </div>
+          <button
+            onClick={() => setDark(!dark)}
+            className="min-h-[44px] shrink-0 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+            aria-label={dark ? 'Light mode' : 'Dark mode'}
+          >
+            {dark ? '☀️ Light' : '🌙 Dark'}
+          </button>
         </div>
       </header>
 
@@ -318,7 +385,7 @@ export default function App() {
         </div>
       )}
 
-      <nav className="no-print border-b bg-white" aria-label="Steps">
+      <nav className="no-print border-b bg-white dark:border-slate-800 dark:bg-slate-900" aria-label="Steps">
         <ol className="mx-auto flex max-w-6xl items-center px-4 py-3">
           {STEPS.map((label, i) => (
             <li key={label} className="flex min-w-0 flex-1 items-center">
@@ -328,8 +395,8 @@ export default function App() {
                   (i < step
                     ? 'bg-emerald-600 text-white'
                     : i === step
-                      ? 'bg-emerald-100 text-emerald-800 ring-2 ring-emerald-600'
-                      : 'bg-slate-200 text-slate-600')
+                      ? 'bg-emerald-100 text-emerald-800 ring-2 ring-emerald-600 dark:bg-emerald-900 dark:text-emerald-200'
+                      : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300')
                 }
               >
                 {i < step ? '✓' : i + 1}
@@ -337,19 +404,29 @@ export default function App() {
               <span
                 className={
                   'ml-1 truncate whitespace-nowrap text-[11px] font-medium sm:ml-2 sm:text-sm ' +
-                  (i === step ? 'text-emerald-800' : 'text-slate-500')
+                  (i === step ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400')
                 }
               >
                 {label}
               </span>
-              {i < STEPS.length - 1 && <span className="mx-1 h-px min-w-2 flex-1 bg-slate-200 sm:mx-2" />}
+              {i < STEPS.length - 1 && <span className="mx-1 h-px min-w-2 flex-1 bg-slate-200 dark:bg-slate-800 sm:mx-2" />}
             </li>
           ))}
         </ol>
       </nav>
 
       <main className="no-print mx-auto max-w-6xl px-4 py-6">
-        {step === 0 && <Upload onParsed={handleParsed} />}
+        {step === 0 && (
+          <Upload
+            onParsed={handleParsed}
+            month={sheetMonth}
+            year={sheetYear}
+            onMonthYear={(m, y) => {
+              setSheetMonth(m);
+              setSheetYear(y);
+            }}
+          />
+        )}
 
         {step === 1 && (
           <Review
@@ -360,6 +437,12 @@ export default function App() {
             onRowsChange={setForms}
             onBack={() => setStep(0)}
             onContinue={() => setStep(2)}
+            apiKey={apiKey}
+            onApiKey={handleApiKey}
+            smartFixOn={smartFixOn}
+            onSmartFix={handleSmartFix}
+            onRerunSmartFix={rerunSmartFix}
+            busy={busy}
           />
         )}
 
@@ -377,15 +460,15 @@ export default function App() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => setStep(1)}
-                className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                Back
+                Peeche
               </button>
               <button
                 onClick={() => setStep(3)}
                 className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
               >
-                Continue
+                Aagay
               </button>
             </div>
           </div>
@@ -404,15 +487,15 @@ export default function App() {
 
       {busy && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="rounded-lg bg-white px-6 py-5 text-center shadow-xl">
+          <div className="rounded-lg bg-white px-6 py-5 text-center shadow-xl dark:bg-slate-900">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
             <p className="text-sm">{busyMsg || 'Kaam ho raha hai...'}</p>
           </div>
         </div>
       )}
 
-      <footer className="no-print border-t bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-slate-500">
+      <footer className="no-print border-t bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-slate-500 dark:text-slate-400">
           Crown Textile ke liye banaya gaya internal tool.
         </div>
       </footer>
