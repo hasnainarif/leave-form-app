@@ -122,6 +122,9 @@ async function buildForms(rawRows, mapping, opts) {
     };
   });
 
+  // Stats so the UI can tell the user whether Gemini actually ran.
+  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && apiKey) };
+
   if (smartFixOn && apiKey) {
     const kinds = ['name', 'father', 'designation', 'department', 'reason'];
     const CHUNK = 8;
@@ -134,23 +137,35 @@ async function buildForms(rawRows, mapping, opts) {
         });
       });
       if (!items.length) continue;
+      stats.attempted += items.length;
       try {
+        // IMPORTANT: always send Gemini the ORIGINAL ENGLISH text, never the
+        // already-transliterated Urdu. Re-running on Gemini's own Urdu output
+        // caused drift (e.g. a correct name turning wrong on the second run).
         const fixed = await smartUrduFix(
-          items.map((it) => chunk[it.ci][it.k]),
+          items.map((it) => {
+            const eng = (chunk[it.ci].english && chunk[it.ci].english[it.k]) || '';
+            return eng.trim() ? eng : chunk[it.ci][it.k];
+          }),
           items.map((it) => it.k),
           apiKey
         );
         if (Array.isArray(fixed) && fixed.length === items.length) {
           items.forEach((it, idx) => {
             const v = fixed[idx];
-            if (typeof v === 'string' && v.trim()) chunk[it.ci][it.k] = v;
+            if (typeof v === 'string' && v.trim()) {
+              chunk[it.ci][it.k] = v;
+              stats.fixed += 1;
+            }
           });
         }
       } catch (e) {
-        // silent fallback, keep local transliteration
+        // mark the failure visibly instead of failing silently
+        stats.failed = true;
       }
     }
   }
+  forms._geminiStats = stats;
   return forms;
 }
 
@@ -251,6 +266,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [busyMsg, setBusyMsg] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [online] = useState(() => {
     try {
       return isConfigured();
@@ -294,6 +310,7 @@ export default function App() {
       setHeaders(headers);
       setMapping(useMapping);
       setForms(built);
+      reportGeminiStats(built);
       setStep(1);
     } catch (e) {
       setError('Rows tayyar karne mein masla hua. Dobara koshish karein.');
@@ -324,6 +341,20 @@ export default function App() {
     }
   };
 
+  // Tell the user plainly whether Gemini actually ran and fixed values,
+  // so a silent fallback is never mistaken for a successful correction.
+  const reportGeminiStats = (built) => {
+    const st = built && built._geminiStats;
+    if (!st || st.skipped) return;
+    if (st.failed && st.fixed === 0) {
+      setError('Gemini se rabta nahi ho saka (API key ya internet check karein). Local Urdu wali values rakhi hain.');
+    } else if (st.failed) {
+      setNotice(`Gemini ne ${st.fixed} values theek kin, lekin kuch reh gayin. Dobara koshish kar sakte hain.`);
+    } else if (st.fixed > 0) {
+      setNotice(`Gemini ne ${st.fixed} naam/department/reason Urdu me theek kar diye.`);
+    }
+  };
+
   // Re-run Gemini smart fix on the ALREADY-UPLOADED rows with the current
   // key/toggle — no re-upload needed. This is the prominent "Gemini se Urdu
   // theek karwain" action shown on the Review step. Any failure keeps the
@@ -343,6 +374,7 @@ export default function App() {
         year: sheetYear,
       });
       setForms(rebuilt);
+      reportGeminiStats(rebuilt);
     } catch (e) {
       setError('Smart fix nahi chal saka. Local Urdu wali values mehfooz hain.');
     } finally {
@@ -413,6 +445,17 @@ export default function App() {
         <div className="no-print bg-amber-100 text-amber-900">
           <div className="mx-auto max-w-6xl px-4 py-2 text-sm">
             Online save off hai. Signatures sirf is session ke liye kaam karein ge.
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className="no-print bg-green-100 text-green-900">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-sm">
+            <span>{notice}</span>
+            <button onClick={() => setNotice('')} className="shrink-0 font-semibold underline">
+              Band karein
+            </button>
           </div>
         </div>
       )}
@@ -503,6 +546,12 @@ export default function App() {
               onSmartFix={handleSmartFix}
               holidays={holidays}
               onHolidays={setHolidays}
+              sheetMonth={sheetMonth}
+              sheetYear={sheetYear}
+              onMonthYear={(m, y) => {
+                setSheetMonth(m);
+                setSheetYear(y);
+              }}
             />
             <div className="flex flex-col gap-3 sm:flex-row">
               <button

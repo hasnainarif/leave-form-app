@@ -76,6 +76,7 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
       <div class="clf-company">کراؤن ٹیکسٹائل (<span class="clf-nowrap">لانڈ‍ھی یونٹ</span>)</div>
       <div class="clf-title">درخواست برائے چھٹی</div>
     </div>
+    <div class="clf-balancer" aria-hidden="true"></div>
   </div>
   <div class="clf-row">
     <div class="clf-field"><span class="clf-label">تاریخ:</span><span class="clf-val">${esc(d.upperDateStr)}</span></div>
@@ -148,11 +149,12 @@ export function formStyles() {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .clf-preview .clf-form { width: 100%; flex: none; height: auto; }
-  .clf-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .clf-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding-top: 14px; }
+  .clf-balancer { flex: 0 0 62px; width: 62px; }
   .clf-head { flex: 1; text-align: center; }
   .clf-company { font-weight: 700; font-size: 16px; }
   .clf-nowrap { white-space: nowrap; }
-  .clf-title { font-weight: 700; font-size: 19px; margin: 3px 0 5px; }
+  .clf-title { font-weight: 700; font-size: 19px; margin: 4px 0 7px; }
   .clf-logo { flex: 0 0 auto; }
   .clf-logoimg { width: 62px; height: 62px; object-fit: contain; }
   .clf-logofallback {
@@ -175,18 +177,18 @@ export function formStyles() {
     display: inline-flex; align-items: center; justify-content: center;
   }
   .clf-tick { font-size: 20px; font-weight: 900; line-height: 1; font-family: Arial, sans-serif; }
-  .clf-signs { display: flex; gap: 10px; margin-top: 8px; flex: 1 0 auto; }
+  .clf-signs { display: flex; gap: 10px; margin-top: 8px; flex: 0 0 auto; }
   .clf-sig { flex: 1; text-align: center; display: flex; flex-direction: column; }
-  .clf-sigimgbox { flex: 1; min-height: 90px; display: flex; align-items: flex-end; justify-content: center; }
+  .clf-sigimgbox { height: 90px; display: flex; align-items: flex-end; justify-content: center; }
   .clf-sigimg { max-height: 66px; max-width: 90%; object-fit: contain; }
   .clf-sigline { border-top: 1px solid #000; margin: 0 10px; }
   .clf-siglabel { font-size: 12px; padding-top: 3px; }
-  .clf-office { border: 1.5px solid #000; margin-top: 10px; padding: 5px 10px 8px; }
+  .clf-office { border: 1.5px solid #000; margin-top: 10px; padding: 5px 10px 8px; flex: 1 0 auto; display: flex; flex-direction: column; }
   .clf-office-title { text-align: center; font-weight: 700; font-size: 13px; }
-  .clf-office-cols { display: flex; gap: 8px; margin-top: 3px; }
-  .clf-obox { flex: 1; border: 1px solid #000; padding: 3px 10px 7px; font-size: 12px; }
+  .clf-office-cols { display: flex; gap: 8px; margin-top: 3px; flex: 1; }
+  .clf-obox { flex: 1; border: 1px solid #000; padding: 3px 10px 7px; font-size: 12px; display: flex; flex-direction: column; }
   .clf-obhead { font-weight: 700; text-align: center; font-size: 13px; }
-  .clf-orow { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }
+  .clf-orow { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; flex: 1; }
   .clf-obox-check { width: 30px; height: 16px; border: 1px solid #000; display: inline-block; }
   @media screen and (max-width: 760px) {
     .clf-page { flex-direction: column; height: auto; }

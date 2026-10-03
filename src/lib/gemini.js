@@ -34,7 +34,7 @@ async function geminiJson(prompt, apiKey, maxOutputTokens) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         maxOutputTokens,
-        temperature: 0.1,
+        temperature: 0,
         responseMimeType: 'application/json',
       },
     }),
@@ -56,20 +56,37 @@ async function geminiJson(prompt, apiKey, maxOutputTokens) {
 /**
  * Fix typos/stray characters and transliterate a batch of roman-English
  * strings into Urdu script.
- * texts: string[]; kinds: label used in the prompt, e.g. 'names',
- *   'designations' or 'departments'; apiKey: Gemini API key.
+ * texts: string[] of original ENGLISH values; kinds: string[] with one label
+ *   per value ('name', 'father', 'designation', 'department', 'reason');
+ *   apiKey: Gemini API key.
  * Returns string[] of Urdu strings in the same order. Throws on any failure.
  */
 export async function smartUrduFix(texts, kinds, apiKey) {
-  const batches = chunk(texts.map(String), 50);
+  const items = texts.map(String);
+  const labels = Array.isArray(kinds) ? kinds.map(String) : [];
+  const batches = chunk(
+    items.map((t, i) => ({ t, kind: labels[i] || 'name' })),
+    40
+  );
   const out = [];
   for (const batch of batches) {
+    const lines = batch
+      .map((it, i) => `${i + 1}. [${it.kind}] "${it.t}"`)
+      .join('\n');
     const prompt =
-      `Fix typos/stray characters in these Pakistani factory employee ${kinds} ` +
-      `written in English, then transliterate each to Urdu script. Return ONLY a ` +
-      `JSON array of Urdu strings, same order, no explanations. ` +
-      `Input: ${JSON.stringify(batch)}`;
-    const arr = await geminiJson(prompt, apiKey, 800);
+      `You are a careful Urdu data-entry assistant for a Pakistani textile factory. ` +
+      `Below are values in English, each labelled with its field type. Fix any typos or ` +
+      `stray characters, then write each in proper Urdu script.\n` +
+      `Rules:\n` +
+      `- [name] / [father]: transliterate the person's name with correct Urdu spelling ` +
+      `(e.g. "MUHAMMAD ASLAM" -> "محمد اسلم", "RUQSANA BIBI" -> "رقصانہ بی بی").\n` +
+      `- [designation]: translate common job titles (e.g. "OFFICER" -> "آفیسر").\n` +
+      `- [department]: translate generic words but KEEP department codes in English ` +
+      `(e.g. "STITCHING 04" stays "STITCHING 04").\n` +
+      `- [reason]: translate to natural Urdu (e.g. "Due to sick" -> "بیماری کی وجہ سے").\n` +
+      `- Return ONLY a JSON array of Urdu strings, in the same order, no commentary.\n` +
+      `Values:\n${lines}`;
+    const arr = await geminiJson(prompt, apiKey, 1200);
     if (!Array.isArray(arr) || arr.length !== batch.length) {
       throw new Error('Gemini returned an unexpected response shape');
     }

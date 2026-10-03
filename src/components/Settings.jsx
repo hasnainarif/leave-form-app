@@ -13,8 +13,6 @@ import { isConfigured, fetchHolidays, saveHolidays } from '../lib/supabase.js';
 
 const LS_KEY = 'crown-leave-gemini-key';
 
-const currentMonth = () => new Date().toISOString().slice(0, 7);
-
 // Normalize whatever the sibling's fetchKarachiHolidays returns into YYYY-MM-DD strings.
 function normalizeDates(raw) {
   if (!Array.isArray(raw)) return [];
@@ -35,10 +33,21 @@ export default function Settings({
   onSmartFix = () => {},
   holidays = [],
   onHolidays = () => {},
+  sheetMonth,
+  sheetYear,
+  onMonthYear = () => {},
 }) {
   const [keyInput, setKeyInput] = useState(apiKey || '');
   const [keySaved, setKeySaved] = useState(false);
-  const [month, setMonth] = useState(currentMonth());
+  // The holiday month follows the register's month picked on the Upload step
+  // (single source of truth in App) — no more setting it twice.
+  const month = `${sheetYear}-${String(sheetMonth).padStart(2, '0')}`;
+  const handleMonthInput = (e) => {
+    const v = e.target.value;
+    if (!v) return;
+    const [y, m] = String(v).split('-').map(Number);
+    if (y && m >= 1 && m <= 12) onMonthYear(m, y);
+  };
   const [review, setReview] = useState(null); // null = not reviewing, array = draft date rows
   const [reviewSource, setReviewSource] = useState('manual');
   const [geminiBusy, setGeminiBusy] = useState(false);
@@ -193,18 +202,18 @@ export default function Settings({
           type="month"
           style={s.input}
           value={month}
-          onChange={(e) => e.target.value && setMonth(e.target.value)}
+          onChange={handleMonthInput}
         />
 
         <div style={s.btnRow}>
           <button
-            style={{ ...s.btn, flex: 1, opacity: apiKey ? 1 : 0.5 }}
+            style={{ ...s.btn, flex: '1 1 200px', opacity: apiKey ? 1 : 0.5 }}
             onClick={loadFromGemini}
             disabled={!apiKey || geminiBusy}
           >
             {geminiBusy ? 'La rahe hain...' : 'Gemini se Karachi holidays lao'}
           </button>
-          <button style={{ ...s.btn, ...s.ghostBtn }} onClick={manualAdd}>
+          <button style={{ ...s.btn, ...s.ghostBtn, flex: '1 1 140px' }} onClick={manualAdd}>
             Manual add
           </button>
         </div>
@@ -282,7 +291,7 @@ const s = {
   },
   h3: { fontSize: 17, margin: '0 0 12px' },
   row: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 },
-  btnRow: { display: 'flex', gap: 8, marginTop: 10 },
+  btnRow: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   input: {
     width: '100%',
     fontSize: 16,
