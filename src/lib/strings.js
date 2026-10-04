@@ -131,7 +131,7 @@ const en = {
     defaultHrNote: 'This is the HR signature, used on every form.',
     confirmDelete: 'Delete this signature?',
     ruleAll: (pos) => pos + ' line on every form.',
-    ruleWhen: (pos, field, needle, op) => pos + ' line, only when ' + field + ' "' + needle + '" ' + op + '.',
+    ruleWhen: (pos, field, needle, op) => pos + ' line, only when ' + field + ' ' + op + ' "' + needle + '".',
     opContainsText: 'contains',
     opEqualsText: 'is equal to',
     sessionOnly:
