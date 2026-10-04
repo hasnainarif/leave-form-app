@@ -63,6 +63,7 @@ export default function SignatureManager({
   signatures = [],
   onChange = () => {},
   defaultHrSignUrl = null,
+  userId = null,
 }) {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,11 +72,12 @@ export default function SignatureManager({
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
 
-  // Mount: load from DB when configured, else session-memory mode.
+  // Load from DB when logged in, else session-memory mode. Reloads on login/logout.
   useEffect(() => {
     let alive = true;
+    setLoading(true);
     (async () => {
-      if (isConfigured()) {
+      if (isConfigured() && userId) {
         const rows = await fetchSignatures();
         if (!alive) return;
         if (Array.isArray(rows)) {
@@ -84,6 +86,9 @@ export default function SignatureManager({
         } else {
           setNotice('Supabase se load nahi ho saka. Is session ke liye local mode me chal raha hai.');
         }
+      } else if (isConfigured() && !userId) {
+        onChange([]);
+        setNotice('Login karein taake signatures aap ke account se sync hon.');
       } else {
         setNotice('Signatures saved for this session only. Connect Supabase for permanent save.');
       }
@@ -93,7 +98,7 @@ export default function SignatureManager({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userId]);
 
   const updateSig = (id, patch) => {
     onChange(signatures.map((s) => (s.id === id ? { ...s, ...patch } : s)));

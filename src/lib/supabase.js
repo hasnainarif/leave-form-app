@@ -29,6 +29,111 @@ export function getClient() {
   return _client;
 }
 
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+/** Current logged-in user (from the persisted session), or null. */
+export async function getUser() {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb.auth.getUser();
+    if (error) return null;
+    return data?.user || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Sign up with email + password. Returns { user, session, needsConfirm } or throws. */
+export async function signUp(email, password) {
+  const sb = getClient();
+  if (!sb) throw new Error('Supabase is not connected yet.');
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) throw new Error(friendlyAuthError(error));
+  return {
+    user: data.user,
+    session: data.session,
+    needsConfirm: !data.session,
+  };
+}
+
+/** Sign in with email + password. Returns the user or throws. */
+export async function signIn(email, password) {
+  const sb = getClient();
+  if (!sb) throw new Error('Supabase is not connected yet.');
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(friendlyAuthError(error));
+  return data.user;
+}
+
+/** Sign out. Never throws. */
+export async function signOut() {
+  const sb = getClient();
+  if (!sb) return;
+  try {
+    await sb.auth.signOut();
+  } catch (e) {
+    console.warn('[supabase] signOut failed:', e.message);
+  }
+}
+
+/** Subscribe to auth changes. Returns an unsubscribe function. */
+export function onAuthChange(cb) {
+  const sb = getClient();
+  if (!sb) return () => {};
+  const { data } = sb.auth.onAuthStateChange((_event, session) => {
+    cb(session?.user || null);
+  });
+  return () => {
+    try {
+      data.subscription.unsubscribe();
+    } catch (e) {
+      // ignore
+    }
+  };
+}
+
+function friendlyAuthError(error) {
+  const msg = (error && error.message) || 'Login failed.';
+  if (/invalid login credentials/i.test(msg)) return 'Email ya password ghalat hai.';
+  if (/user already registered/i.test(msg)) return 'Ye email pehle se registered hai. Login karein.';
+  if (/password should be at least/i.test(msg)) return 'Password kam az kam 6 harf ka ho.';
+  if (/email.*invalid/i.test(msg)) return 'Email address durust nahi hai.';
+  return msg;
+}
+
+/** user_id of the current session (read from local storage, no network), or null. */
+async function currentUserId() {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data } = await sb.auth.getSession();
+    return data?.session?.user?.id || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * One-time adoption: claim rows saved before accounts existed
+ * (user_id IS NULL) for the current user. Runs after login; harmless
+ * when there is nothing to adopt or the migration is not applied yet.
+ */
+export async function adoptOrphanRows() {
+  const sb = getClient();
+  if (!sb) return;
+  const uid = await currentUserId();
+  if (!uid) return;
+  try {
+    await sb.from(SIG_TABLE).update({ user_id: uid }).is('user_id', null);
+    await sb.from(HOL_TABLE).update({ user_id: uid }).is('user_id', null);
+  } catch (e) {
+    console.warn('[supabase] adoptOrphanRows failed:', e.message);
+  }
+}
+
 function mapSignature(row) {
   if (!row) return null;
   return {
@@ -56,16 +161,20 @@ function toRow(sig) {
 }
 
 /**
- * Load all signatures, oldest first.
- * Returns mapped array, or null on any failure (caller falls back to session memory).
+ * Load the CURRENT USER's signatures, oldest first.
+ * Returns mapped array, or null when logged out / on any failure
+ * (caller falls back to session memory).
  */
 export async function fetchSignatures() {
   const sb = getClient();
   if (!sb) return null;
+  const uid = await currentUserId();
+  if (!uid) return null;
   try {
     const { data, error } = await sb
       .from(SIG_TABLE)
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: true });
     if (error) {
       console.warn('[supabase] fetchSignatures failed:', error.message);
@@ -78,14 +187,16 @@ export async function fetchSignatures() {
   }
 }
 
-/** Insert or update one signature. Returns the saved mapped row, or null on failure. */
+/** Insert or update one signature for the current user. Returns the saved mapped row, or null. */
 export async function upsertSignature(sig) {
   const sb = getClient();
   if (!sb) return null;
+  const uid = await currentUserId();
+  if (!uid) return null;
   try {
-    const payload = toRow(sig);
-    const query = sig.id
-      ? sb.from(SIG_TABLE).update(payload).eq('id', sig.id).select().single()
+    const payload = { ...toRow(sig), user_id: uid };
+    const query = sig.id && !String(sig.id).startsWith('local-')
+      ? sb.from(SIG_TABLE).update(payload).eq('id', sig.id).eq('user_id', uid).select().single()
       : sb.from(SIG_TABLE).insert(payload).select().single();
     const { data, error } = await query;
     if (error) {
@@ -99,12 +210,14 @@ export async function upsertSignature(sig) {
   }
 }
 
-/** Delete a signature by id. Returns true on success, false otherwise. */
+/** Delete a signature by id (current user only). Returns true on success, false otherwise. */
 export async function deleteSignature(id) {
   const sb = getClient();
   if (!sb) return false;
+  const uid = await currentUserId();
+  if (!uid || String(id).startsWith('local-')) return false;
   try {
-    const { error } = await sb.from(SIG_TABLE).delete().eq('id', id);
+    const { error } = await sb.from(SIG_TABLE).delete().eq('id', id).eq('user_id', uid);
     if (error) {
       console.warn('[supabase] deleteSignature failed:', error.message);
       return false;
@@ -142,16 +255,19 @@ export async function uploadSignatureImage(file) {
 }
 
 /**
- * Load saved holidays for a month ('YYYY-MM').
- * Returns { holidays: string[], source } or null when missing / on failure.
+ * Load the CURRENT USER's saved holidays for a month ('YYYY-MM').
+ * Returns { holidays: string[], source } or null when logged out / missing / on failure.
  */
 export async function fetchHolidays(month) {
   const sb = getClient();
   if (!sb) return null;
+  const uid = await currentUserId();
+  if (!uid) return null;
   try {
     const { data, error } = await sb
       .from(HOL_TABLE)
       .select('holidays, source')
+      .eq('user_id', uid)
       .eq('month', month)
       .maybeSingle();
     if (error) {
@@ -169,19 +285,22 @@ export async function fetchHolidays(month) {
   }
 }
 
-/** Save (upsert) the holiday list for a month. Returns true on success, false otherwise. */
+/** Save (upsert) the current user's holiday list for a month. Returns true on success, false otherwise. */
 export async function saveHolidays(month, holidays, source) {
   const sb = getClient();
   if (!sb) return false;
+  const uid = await currentUserId();
+  if (!uid) return false;
   try {
     const { error } = await sb.from(HOL_TABLE).upsert(
       {
+        user_id: uid,
         month,
         holidays: Array.isArray(holidays) ? holidays : [],
         source: source || 'manual',
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'month' }
+      { onConflict: 'user_id,month' }
     );
     if (error) {
       console.warn('[supabase] saveHolidays failed:', error.message);

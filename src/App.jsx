@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import Upload from './components/Upload.jsx';
 import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
@@ -9,7 +9,8 @@ import { hasPin } from './lib/pin.js';
 import { transliterateRow } from './lib/transliterate.js';
 import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
-import { isConfigured } from './lib/supabase.js';
+import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays } from './lib/supabase.js';
+import AuthModal from './components/AuthModal.jsx';
 
 // LocalStorage keys. Settings.jsx (sibling) uses GEMINI_KEYS_LS too so the
 // key list and App state never disagree. App writes it on every change anyway.
@@ -296,6 +297,51 @@ export default function App() {
   const [pinSet] = useState(hasPin);
   const [unlocked, setUnlocked] = useState(() => !hasPin());
 
+  // Supabase auth: login/signup se user ka data (signatures, holidays)
+  // us ke account se sync hota hai. Logged out = sirf is device/session.
+  const [user, setUser] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const userRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const u = await getUser();
+      if (alive) {
+        userRef.current = u;
+        setUser(u);
+        setAuthReady(true);
+      }
+    })();
+    const off = onAuthChange(async (u) => {
+      if (!alive) return;
+      const wasOut = !userRef.current && u;
+      userRef.current = u;
+      setUser(u);
+      if (u && wasOut) {
+        // Fresh login: pehle purana shared data apne naam karo, phir reload.
+        await adoptOrphanRows();
+        const rows = await fetchSignatures();
+        if (Array.isArray(rows)) setSignatures(rows);
+        const hm = sheetMonth && sheetYear ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}` : null;
+        if (hm) {
+          const hres = await fetchHolidays(hm);
+          setHolidays(hres ? hres.holidays : []);
+        }
+      } else if (!u) {
+        // Logout: local mode.
+        setSignatures([]);
+        setHolidays([]);
+      }
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Row data (this is the only thing a new upload refreshes).
   const [headers, setHeaders] = useState([]);
   const [mapping, setMapping] = useState(null);
@@ -481,15 +527,62 @@ export default function App() {
             <h1 className="text-xl font-bold sm:text-2xl">Crown Leave Form App</h1>
             <p className="text-sm text-emerald-100 dark:text-emerald-200">Chutti ke form banayein, sign karein, print karein.</p>
           </div>
-          <button
-            onClick={() => setDark(!dark)}
-            className="min-h-[44px] shrink-0 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
-            aria-label={dark ? 'Light mode' : 'Dark mode'}
-          >
-            {dark ? '☀️ Light' : '🌙 Dark'}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => setDark(!dark)}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-800 text-xl text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+              aria-label={dark ? 'Light mode' : 'Dark mode'}
+              title={dark ? 'Light mode' : 'Dark mode'}
+            >
+              {dark ? '☀️' : '🌙'}
+            </button>
+            <button
+              onClick={() => setStep(2)}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-800 text-xl text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+              aria-label="Settings"
+              title="Settings"
+            >
+              ⚙️
+            </button>
+            {authReady && (
+              user ? (
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Logout karna hai?')) {
+                      await signOut();
+                    }
+                  }}
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+                  title={user.email || 'Logged in'}
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold uppercase dark:bg-emerald-600">
+                    {(user.email || '?')[0]}
+                  </span>
+                  <span className="hidden max-w-[90px] truncate sm:inline">
+                    {(user.email || '').split('@')[0]}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setAuthOpen(true)}
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+                >
+                  👤 Login
+                </button>
+              )
+            )}
+          </div>
         </div>
       </header>
+      {authOpen && (
+        <AuthModal
+          onClose={() => setAuthOpen(false)}
+          onAuth={(u) => {
+            userRef.current = u;
+            setUser(u);
+          }}
+        />
+      )}
 
       {!online && (
         <div className="no-print bg-amber-100 text-amber-900">
@@ -588,6 +681,7 @@ export default function App() {
               signatures={signatures}
               onChange={setSignatures}
               defaultHrSignUrl={defaultHrSignUrl}
+              userId={user ? user.id : null}
             />
             <Settings
               apiKeys={apiKeys}
