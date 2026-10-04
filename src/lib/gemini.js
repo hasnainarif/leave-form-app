@@ -65,8 +65,6 @@ async function postToGemini(model, prompt, apiKey, maxOutputTokens) {
           maxOutputTokens,
           temperature: 0,
           responseMimeType: 'application/json',
-          // 3.x models ki thinking tokens se bachao: seedha jawab chahiye.
-          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
