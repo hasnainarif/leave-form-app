@@ -303,16 +303,44 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const userRef = useRef(null);
+  const cloudSyncedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
+    // Vault sync: pehle purana shared data apne naam karo, phir user ki
+    // keys/signatures/holidays lao. Sirf ek dafa per login-session chalti
+    // hai — chahe fresh login ho ya page reload par session wapas aayi ho.
+    // (Pehle reload wali surat me sync chhoot jati thi aur vault keys
+    // kabhi load nahi hoti thin.)
+    const syncCloud = async () => {
+      const u = userRef.current;
+      if (!u || cloudSyncedRef.current) return;
+      cloudSyncedRef.current = true;
+      await adoptOrphanRows();
+      const vaultKeys = await fetchApiKeys();
+      if (alive && Array.isArray(vaultKeys) && vaultKeys.length) {
+        const merged = [...(apiKeysRef.current || [])];
+        vaultKeys.forEach((k) => { if (!merged.includes(k)) merged.push(k); });
+        if (merged.length !== (apiKeysRef.current || []).length) {
+          handleApiKeys(merged);
+          setNotice('Aap ki Gemini keys vault se load ho gayin hain.');
+        }
+      }
+      const rows = await fetchSignatures();
+      if (alive && Array.isArray(rows)) setSignatures(rows);
+      const hm = sheetMonth && sheetYear ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}` : null;
+      if (hm) {
+        const hres = await fetchHolidays(hm);
+        if (alive) setHolidays(hres ? hres.holidays : []);
+      }
+    };
     (async () => {
       const u = await getUser();
-      if (alive) {
-        userRef.current = u;
-        setUser(u);
-        setAuthReady(true);
-      }
+      if (!alive) return;
+      userRef.current = u;
+      setUser(u);
+      setAuthReady(true);
+      if (u) syncCloud();
     })();
     const off = onAuthChange(async (u) => {
       if (!alive) return;
@@ -320,26 +348,14 @@ export default function App() {
       userRef.current = u;
       setUser(u);
       if (u && wasOut) {
-        // Fresh login: pehle purana shared data apne naam karo, phir reload.
-        await adoptOrphanRows();
-        const vaultKeys = await fetchApiKeys();
-        if (Array.isArray(vaultKeys) && vaultKeys.length) {
-          const merged = [...(apiKeysRef.current || [])];
-          vaultKeys.forEach((k) => { if (!merged.includes(k)) merged.push(k); });
-          if (merged.length !== (apiKeysRef.current || []).length) {
-            handleApiKeys(merged);
-            setNotice('Login ho gaya. Aap ki Gemini keys khud load ho gayin hain.');
-          }
-        }
-        const rows = await fetchSignatures();
-        if (Array.isArray(rows)) setSignatures(rows);
-        const hm = sheetMonth && sheetYear ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}` : null;
-        if (hm) {
-          const hres = await fetchHolidays(hm);
-          setHolidays(hres ? hres.holidays : []);
-        }
-      } else if (!u) {
-        // Logout: local mode.
+        // Naya login: dobara sync ki ijazat do.
+        cloudSyncedRef.current = false;
+      }
+      if (u) {
+        syncCloud();
+      } else {
+        // Logout: local mode, agli login par phir sync hoga.
+        cloudSyncedRef.current = false;
         setSignatures([]);
         setHolidays([]);
       }

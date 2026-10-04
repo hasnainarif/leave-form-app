@@ -212,8 +212,10 @@ export async function smartUrduFix(texts, kinds, apiKeys, onProgress) {
       } catch (e) {
         consecFails += 1;
         keyErrors.set(keyIdx, e.message || String(e));
-        if (keys.length > 1 && consecFails >= MAX_CONSEC_FAILS) {
-          // Ye key is run ke liye dead — bunch wapas, worker band.
+        if (consecFails >= MAX_CONSEC_FAILS) {
+          // Ye key is run ke liye dead — 3 musalsal nakami ke baad isay
+          // mazeed nahi peeta (chahe 1 key ho ya 10). Bunch wapas queue
+          // me, worker band; baqi local Urdu se hoga.
           deadKeys.add(keyIdx);
           queue.unshift(bunch);
           return;
