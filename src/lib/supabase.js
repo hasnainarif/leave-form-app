@@ -46,26 +46,77 @@ export async function getUser() {
   }
 }
 
-/** Sign up with email + password. Returns { user, session, needsConfirm } or throws. */
+/**
+ * Sign up with email + password. NEVER auto-logs in: the caller must show
+ * the "check your email" state. Returns { user } or throws.
+ * (Supabase may still return a session when "Confirm email" is off; we
+ * ignore it on purpose — no access until the email is confirmed.)
+ */
 export async function signUp(email, password) {
   const sb = getClient();
   if (!sb) throw new Error('Supabase is not connected yet.');
-  const { data, error } = await sb.auth.signUp({ email, password });
-  if (error) throw new Error(friendlyAuthError(error));
-  return {
-    user: data.user,
-    session: data.session,
-    needsConfirm: !data.session,
-  };
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: appUrl() },
+  });
+  if (error) throw friendlyAuthError(error);
+  // Safety: never keep a session from signup. Confirmation first.
+  try {
+    await sb.auth.signOut();
+  } catch (e) {
+    // ignore
+  }
+  return { user: data.user };
 }
 
-/** Sign in with email + password. Returns the user or throws. */
+/** Re-send the confirmation email. Throws on failure. */
+export async function resendConfirmation(email) {
+  const sb = getClient();
+  if (!sb) throw new Error('Supabase is not connected yet.');
+  const { error } = await sb.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: appUrl() },
+  });
+  if (error) throw friendlyAuthError(error);
+  return true;
+}
+
+/** This app's public URL (confirmation links come back here). */
+function appUrl() {
+  try {
+    const u = new URL(window.location.href);
+    u.hash = '';
+    u.search = '';
+    return u.toString();
+  } catch (e) {
+    return 'https://hasnainarif.github.io/leave-form-app/';
+  }
+}
+
+/**
+ * Sign in with email + password. Returns the user or throws.
+ * Refuses unconfirmed emails: no access until the confirmation link
+ * in the email has been clicked.
+ */
 export async function signIn(email, password) {
   const sb = getClient();
   if (!sb) throw new Error('Supabase is not connected yet.');
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(friendlyAuthError(error));
-  return data.user;
+  if (error) throw friendlyAuthError(error);
+  const user = data.user;
+  if (user && !user.email_confirmed_at) {
+    try {
+      await sb.auth.signOut();
+    } catch (e) {
+      // ignore
+    }
+    const err = new Error('UNCONFIRMED');
+    err.code = 'UNCONFIRMED';
+    throw err;
+  }
+  return user;
 }
 
 /** Sign out. Never throws. */
@@ -95,13 +146,20 @@ export function onAuthChange(cb) {
   };
 }
 
+/**
+ * Map Supabase auth errors to stable codes. The UI translates codes via
+ * strings.js, so messages stay consistent in both languages.
+ */
 function friendlyAuthError(error) {
   const msg = (error && error.message) || 'Login failed.';
-  if (/invalid login credentials/i.test(msg)) return 'Email ya password ghalat hai.';
-  if (/user already registered/i.test(msg)) return 'Ye email pehle se registered hai. Login karein.';
-  if (/password should be at least/i.test(msg)) return 'Password kam az kam 6 harf ka ho.';
-  if (/email.*invalid/i.test(msg)) return 'Email address durust nahi hai.';
-  return msg;
+  const err = new Error(msg);
+  if (/invalid login credentials/i.test(msg)) err.code = 'INVALID_CREDENTIALS';
+  else if (/user already registered/i.test(msg)) err.code = 'ALREADY_REGISTERED';
+  else if (/password should be at least/i.test(msg)) err.code = 'WEAK_PASSWORD';
+  else if (/email not confirmed/i.test(msg)) err.code = 'NOT_CONFIRMED';
+  else if (/email.*invalid/i.test(msg)) err.code = 'INVALID_EMAIL';
+  else err.code = 'UNKNOWN';
+  return err;
 }
 
 /** user_id of the current session (read from local storage, no network), or null. */

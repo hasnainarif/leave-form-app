@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { parseFile, detectColumns } from '../lib/excel.js';
+import { tr } from '../lib/strings.js';
 
 const ACCEPT = '.xlsx,.xls,.csv';
 
@@ -8,7 +9,8 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export default function Upload({ onParsed, month, year, onMonthYear }) {
+export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear }) {
+  const t = (k, ...a) => tr(lang, k, ...a);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +41,7 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
       const mapping = detectColumns(headers) || {};
       await onParsed({ headers, rows, mapping });
     } catch (e) {
-      setError('File parhne mein masla hua. File dobara check karke upload karein.');
+      setError(t('upload.readFail'));
     } finally {
       setBusy(false);
     }
@@ -56,19 +58,19 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
           📤
         </div>
         <div>
-          <h2 className="text-lg font-extrabold tracking-tight">Excel file upload karein</h2>
+          <h2 className="text-lg font-extrabold tracking-tight">{t('upload.title')}</h2>
           <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-            Sick leave register wali file yahan dein. .xlsx, .xls ya .csv sab chalenge.
+            {t('upload.sub')}
           </p>
         </div>
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          Ye register kis month ka hai?
+          {t('upload.month')}
         </p>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          Date column me sirf din likha ho (jaise 18, 19, 20) to usi month ka samjha jayega.
+          {t('upload.monthNote')}
         </p>
         <div className="mt-2 flex gap-2">
           <select
@@ -127,8 +129,8 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-3xl dark:bg-emerald-900/50">
           📁
         </div>
-        <p className="text-base font-bold text-slate-800 dark:text-slate-100">File chunein ya yahan drop karein</p>
-        <p className="mt-1 text-sm text-slate-500">Phone se bhi file select ho jayegi.</p>
+        <p className="text-base font-bold text-slate-800 dark:text-slate-100">{t('upload.drop')}</p>
+        <p className="mt-1 text-sm text-slate-500">{t('upload.dropPhone')}</p>
         <input
           ref={inputRef}
           type="file"
@@ -143,17 +145,15 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
       </div>
 
       {fileName && <p className="mt-2 truncate text-sm text-slate-600">File: {fileName}</p>}
-      {busy && <p className="mt-2 text-sm font-medium text-emerald-700">File parhi ja rahi hai...</p>}
+      {busy && <p className="mt-2 text-sm font-medium text-emerald-700">{t('upload.reading')}</p>}
       {error && (
         <p className="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
       <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-400 sm:text-sm">
-        <p className="font-semibold">File mein ye columns hone chahiye:</p>
+        <p className="font-semibold">{t('upload.needCols')}</p>
         <p className="mt-1">
-          Ecode, Name, Father, Designation, Department, Date, Reason. Naam thore
-          mukhtalif bhi hon to app khud pehchanne ki koshish karegi, aur agle step
-          mein aap mapping khud theek kar sakte hain.
+          {t('upload.colsNote')}
         </p>
       </div>
     </section>

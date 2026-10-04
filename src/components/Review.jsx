@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { tr } from '../lib/strings.js';
 
 const FIELD_LABELS = [
   ['ecode', 'Ecode'],
@@ -16,6 +16,7 @@ const inputCls =
   'font-urdu mt-1 w-full rounded border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-sm focus:border-emerald-500 focus:outline-none';
 
 export default function Review({
+  lang = 'en',
   headers,
   rows,
   mapping,
@@ -24,12 +25,13 @@ export default function Review({
   onBack,
   onContinue,
   apiKeys,
-  onApiKeys,
+  onManageKeys = () => {},
   smartFixOn,
   onSmartFix,
   onRerunSmartFix,
   busy,
 }) {
+  const t = (p, ...a) => tr(lang, p, ...a);
   const changeMapping = (field) => (e) => {
     onMappingChange({ ...(mapping || {}), [field]: e.target.value || null });
   };
@@ -39,110 +41,64 @@ export default function Review({
 
   const dropRow = (id) => onRowsChange(rows.filter((r) => r.id !== id));
 
-  // Multi-key add/remove (keys live only in this browser).
-  const [newKey, setNewKey] = useState('');
   const keyList = Array.isArray(apiKeys) ? apiKeys : [];
-  const maskKey = (k) => {
-    const s = String(k || '');
-    return s.length > 10 ? `${s.slice(0, 4)}...${s.slice(-4)}` : '****';
-  };
-  const addKey = () => {
-    const k = newKey.trim();
-    if (!k) return;
-    if (!keyList.includes(k)) onApiKeys && onApiKeys([...keyList, k]);
-    setNewKey('');
-  };
-  const removeKey = (k) => {
-    onApiKeys && onApiKeys(keyList.filter((x) => x !== k));
-  };
 
   const canContinue =
     !!mapping && REQUIRED.every((f) => mapping[f]) && rows.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* Gemini Smart Urdu Fix — naam aur department naam Urdu me theek karein.
-          Upload ke BAAD bhi chal sakta hai, dobara file dene ki zaroorat nahi. */}
-      <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-950 sm:p-6">
-        <h2 className="text-lg font-semibold">✨ Gemini se Urdu theek karwain</h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Employee ke naam aur department ke naam Gemini se saaf aur durust Urdu me likhwayein.
-          Pehle apni Gemini API key dein (sirf is browser me mehfooz rehti hai).
-        </p>
+      {/* Gemini Smart Urdu Fix — keys are managed in the API Keys view;
+          here we only run the fix with the configured keys. */}
+      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-zinc-100 dark:bg-slate-900 dark:ring-slate-800 sm:p-6">
+        <h2 className="text-base font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
+          ✨ {t('review.smartTitle')}
+        </h2>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-slate-400">{t('review.smartSub')}</p>
         <div className="mt-3 flex flex-col gap-3">
-          {/* Saved keys */}
-          {keyList.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {keyList.map((k) => (
-                <div
-                  key={k}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <span className="font-mono">🔑 {maskKey(k)}</span>
-                  <button
-                    onClick={() => removeKey(k)}
-                    className="shrink-0 text-xs font-semibold text-red-600 underline dark:text-red-400"
-                  >
-                    Hatayein
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Add a new key */}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              type="password"
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') addKey(); }}
-              placeholder="Nayi Gemini API key yahan paste karein"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
-              autoComplete="off"
-            />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-zinc-600 dark:text-slate-300">
+              🔑 {t('review.keysConfigured', keyList.length)}
+            </span>
             <button
-              onClick={addKey}
-              disabled={!newKey.trim()}
-              className="shrink-0 rounded-lg bg-slate-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={onManageKeys}
+              className="rounded-full bg-zinc-100 px-3.5 py-1.5 text-xs font-bold text-zinc-700 transition hover:bg-zinc-200 dark:bg-slate-800 dark:text-slate-200"
             >
-              Key add karein
+              {t('review.manageKeys')}
             </button>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {keyList.length === 0
-              ? 'Key ke baghair button nahi chalega. Key AI Studio se free me milti hai.'
-              : `${keyList.length} key${keyList.length > 1 ? 's' : ''} mehfooz hain. Ek fail ho to doosri khud try hogi, taake sare naam lazmi process hon.`}
-          </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-200">
               <input
                 type="checkbox"
                 checked={!!smartFixOn}
                 onChange={(e) => onSmartFix && onSmartFix(e.target.checked)}
                 className="h-5 w-5 accent-emerald-600"
               />
-              Smart Urdu fix ON hai
+              {t('review.smartOn')}
             </label>
             <button
               onClick={onRerunSmartFix}
               disabled={busy || !keyList.length}
-              className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? 'Gemini kaam kar raha hai...' : 'Gemini se Urdu theek karwain'}
+              {busy ? t('review.running') : t('review.runFix')}
             </button>
           </div>
           {!keyList.length && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Pehle upar se kam az kam ek key add karein.
+            <p className="text-xs text-zinc-500 dark:text-slate-400">
+              {lang === 'ur'
+                ? 'Pehle API Keys wale section me kam az kam ek key add karein.'
+                : 'Add at least one key in the API Keys section first.'}
             </p>
           )}
         </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
-        <h2 className="text-lg font-semibold">Column mapping</h2>
+        <h2 className="text-lg font-semibold">{t('review.mapTitle')}</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Har field ke liye sahi column chunein. Name aur Date lazmi hain.
+          {t('review.mapSub')}
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {FIELD_LABELS.map(([field, label]) => (
@@ -169,14 +125,14 @@ export default function Review({
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
-        <h2 className="text-lg font-semibold">Rows ({(rows || []).length})</h2>
+        <h2 className="text-lg font-semibold">{t('review.rowsTitle', (rows || []).length)}</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Urdu text yahan theek kar sakte hain. Print se pehle aik nazar dekh lein.
+          {t('review.rowsSub')}
         </p>
 
         {rows.length === 0 && (
           <p className="mt-4 rounded bg-slate-50 dark:bg-slate-800 p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-            Koi row nahi mili.
+            {t('review.noRows')}
           </p>
         )}
 
@@ -257,7 +213,7 @@ export default function Review({
                   onClick={() => dropRow(r.id)}
                   className="text-xs font-medium text-red-600 hover:underline"
                 >
-                  Ye row hata dein
+                  {t('review.removeRow')}
                 </button>
               </div>
             </article>
@@ -270,20 +226,19 @@ export default function Review({
           onClick={onBack}
           className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
         >
-          Peeche
+          {t('back')}
         </button>
         <button
           onClick={onContinue}
           disabled={!canContinue}
           className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Aagay
+          {t('continue')}
         </button>
       </div>
       {!canContinue && (
         <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Aagay ke liye Name aur Date column ka map hona aur kam az kam aik row
-          hona zaroori hai.
+          {t('review.needMapping')}
         </p>
       )}
     </div>

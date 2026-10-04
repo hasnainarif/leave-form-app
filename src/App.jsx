@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import Upload from './components/Upload.jsx';
 import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
-import SignatureManager from './components/SignatureManager.jsx';
-import Settings from './components/Settings.jsx';
 import PinLock from './components/PinLock.jsx';
 import { hasPin } from './lib/pin.js';
 import { transliterateRow } from './lib/transliterate.js';
 import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
 import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays, fetchApiKeys, saveApiKey, deleteApiKey } from './lib/supabase.js';
-import AuthModal from './components/AuthModal.jsx';
+import AuthScreen from './components/AuthScreen.jsx';
+import ApiKeysView from './components/ApiKeysView.jsx';
+import SignaturesView from './components/SignaturesView.jsx';
+import SettingsView from './components/SettingsView.jsx';
+import { tr } from './lib/strings.js';
 
 // LocalStorage keys. Settings.jsx (sibling) uses GEMINI_KEYS_LS too so the
 // key list and App state never disagree. App writes it on every change anyway.
@@ -39,7 +41,7 @@ function loadApiKeys() {
 }
 
 const FIELDS = ['ecode', 'name', 'father', 'designation', 'department', 'date', 'reason'];
-const STEPS = ['Upload', 'Review rows', 'Signatures', 'Generate'];
+const LANG_LS = 'crown-leave-lang';
 
 let uidCounter = 0;
 function uid() {
@@ -249,12 +251,33 @@ function downloadHtmlDocument(html) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
+
+
 export default function App() {
+  // Language: English default (WAbot-style), Urdu toggle. Persisted.
+  const [lang, setLang] = useState(() => {
+    try {
+      return localStorage.getItem(LANG_LS) || 'en';
+    } catch (e) {
+      return 'en';
+    }
+  });
+  const changeLang = (l) => {
+    setLang(l);
+    try {
+      localStorage.setItem(LANG_LS, l);
+    } catch (e) {
+      // ignore
+    }
+  };
+  const t = (p, ...a) => tr(lang, p, ...a);
+
+  // Top-level view (WAbot-style app sections, not one mixed page).
+  const [view, setView] = useState('forms');
+  // Workflow step inside the Forms view: 0 upload → 1 review → 2 generate.
   const [step, setStep] = useState(0);
 
   // Settings live here at the top level and are NEVER wiped by a new upload.
-  // Multiple Gemini keys: the smart fix rotates through them so every single
-  // name gets processed even if one key is rate-limited or down.
   const [apiKeys, setApiKeys] = useState(loadApiKeys);
   const apiKeysRef = useRef(null);
   if (apiKeysRef.current === null) apiKeysRef.current = apiKeys;
@@ -269,12 +292,9 @@ export default function App() {
   const [holidays, setHolidays] = useState([]);
   const defaultHrSignUrl = useDefaultHrSignUrl();
 
-  // The register's month/year. Bare day numbers (18/19/20) in the sheet
-  // belong to THIS month, never silently to "today".
   const [sheetMonth, setSheetMonth] = useState(() => new Date().getMonth() + 1);
   const [sheetYear, setSheetYear] = useState(() => new Date().getFullYear());
 
-  // Dark mode for the app UI (the printed forms always stay black-on-white).
   const [dark, setDark] = useState(() => {
     try {
       return localStorage.getItem('crown-leave-theme') === 'dark';
@@ -291,27 +311,18 @@ export default function App() {
     }
   }, [dark]);
 
-  // App PIN lock: when a PIN is set, the whole app stays behind the
-  // lock screen until this session unlocks. Session-only: a fresh page
-  // load locks again.
+  // App PIN lock: session-only, a fresh page load locks again.
   const [pinSet] = useState(hasPin);
   const [unlocked, setUnlocked] = useState(() => !hasPin());
 
-  // Supabase auth: login/signup se user ka data (signatures, holidays)
-  // us ke account se sync hota hai. Logged out = sirf is device/session.
+  // Auth: the whole app sits behind a confirmed login. No local mode.
   const [user, setUser] = useState(null);
-  const [authOpen, setAuthOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const userRef = useRef(null);
   const cloudSyncedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
-    // Vault sync: pehle purana shared data apne naam karo, phir user ki
-    // keys/signatures/holidays lao. Sirf ek dafa per login-session chalti
-    // hai — chahe fresh login ho ya page reload par session wapas aayi ho.
-    // (Pehle reload wali surat me sync chhoot jati thi aur vault keys
-    // kabhi load nahi hoti thin.)
     const syncCloud = async () => {
       const u = userRef.current;
       if (!u || cloudSyncedRef.current) return;
@@ -320,15 +331,20 @@ export default function App() {
       const vaultKeys = await fetchApiKeys();
       if (alive && Array.isArray(vaultKeys) && vaultKeys.length) {
         const merged = [...(apiKeysRef.current || [])];
-        vaultKeys.forEach((k) => { if (!merged.includes(k)) merged.push(k); });
+        vaultKeys.forEach((k) => {
+          if (!merged.includes(k)) merged.push(k);
+        });
         if (merged.length !== (apiKeysRef.current || []).length) {
           handleApiKeys(merged);
-          setNotice('Aap ki Gemini keys vault se load ho gayin hain.');
+          setNotice(t('keys.keyCount', merged.length));
         }
       }
       const rows = await fetchSignatures();
       if (alive && Array.isArray(rows)) setSignatures(rows);
-      const hm = sheetMonth && sheetYear ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}` : null;
+      const hm =
+        sheetMonth && sheetYear
+          ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}`
+          : null;
       if (hm) {
         const hres = await fetchHolidays(hm);
         if (alive) setHolidays(hres ? hres.holidays : []);
@@ -348,16 +364,16 @@ export default function App() {
       userRef.current = u;
       setUser(u);
       if (u && wasOut) {
-        // Naya login: dobara sync ki ijazat do.
         cloudSyncedRef.current = false;
       }
       if (u) {
         syncCloud();
       } else {
-        // Logout: local mode, agli login par phir sync hoga.
         cloudSyncedRef.current = false;
         setSignatures([]);
         setHolidays([]);
+        setView('forms');
+        setStep(0);
       }
     });
     return () => {
@@ -376,16 +392,11 @@ export default function App() {
   const [busyMsg, setBusyMsg] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [online] = useState(() => {
-    try {
-      return isConfigured();
-    } catch (e) {
-      return false;
-    }
-  });
 
   const handleApiKeys = (keys) => {
-    const arr = (Array.isArray(keys) ? keys : []).map((k) => String(k || '').trim()).filter(Boolean);
+    const arr = (Array.isArray(keys) ? keys : [])
+      .map((k) => String(k || '').trim())
+      .filter(Boolean);
     const prev = apiKeysRef.current || [];
     setApiKeys(arr);
     apiKeysRef.current = arr;
@@ -394,12 +405,15 @@ export default function App() {
     } catch (e) {
       // ignore
     }
-    // Vault sync: added keys go up, removed keys come down (fire and forget).
     if (userRef.current) {
       const added = arr.filter((k) => !prev.includes(k));
       const removed = prev.filter((k) => !arr.includes(k));
-      added.forEach((k) => { saveApiKey(k); });
-      removed.forEach((k) => { deleteApiKey(k); });
+      added.forEach((k) => {
+        saveApiKey(k);
+      });
+      removed.forEach((k) => {
+        deleteApiKey(k);
+      });
     }
   };
 
@@ -412,20 +426,18 @@ export default function App() {
     }
   };
 
-  // First upload sets the mapping from detectColumns. Later uploads keep the
-  // existing mapping and only refresh the row data, per the standing rule.
   const handleParsed = async ({ headers, rows, mapping: detected }) => {
     setError('');
     const useMapping = mapping || detected || {};
     setBusy(true);
-    setBusyMsg('File parh li. Urdu tayyar ki ja rahi hai...');
+    setBusyMsg(t('busy.parsing'));
     try {
       const built = await buildForms(rows, useMapping, {
         apiKeys,
         smartFixOn,
         month: sheetMonth,
         year: sheetYear,
-        onProgress: (d, t) => setBusyMsg(`Gemini se Urdu theek ho rahi hai... ${d}/${t}`),
+        onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
       setHeaders(headers);
       setMapping(useMapping);
@@ -433,19 +445,17 @@ export default function App() {
       reportGeminiStats(built);
       setStep(1);
     } catch (e) {
-      setError('Rows tayyar karne mein masla hua. Dobara koshish karein.');
+      setError(t('busy.parseFail'));
     } finally {
       setBusy(false);
       setBusyMsg('');
     }
   };
 
-  // Mapping edits re-derive Urdu text from the original raw rows (local only,
-  // no extra Gemini call). Manual row edits made after upload get re-derived.
   const handleMappingChange = async (newMapping) => {
     setMapping(newMapping);
     setBusy(true);
-    setBusyMsg('Column mapping update ho rahi hai...');
+    setBusyMsg(t('busy.mapping'));
     try {
       const rawRows = forms.map((f) => f._raw).filter(Boolean);
       const rebuilt = await buildForms(rawRows, newMapping, {
@@ -461,36 +471,23 @@ export default function App() {
     }
   };
 
-  // Tell the user plainly whether Gemini actually ran and fixed values,
-  // so a silent fallback is never mistaken for a successful correction.
-  // With key rotation + retries + batch splitting inside, a failure means
-  // Gemini was truly unreachable — reported as an error, never a soft
-  // "some remained" note.
   const reportGeminiStats = (built) => {
     const st = built && built._geminiStats;
     if (!st || st.skipped) return;
     if (st.failed) {
       const reasons = (st.keyErrors || []).slice(0, 3).join(' | ');
-      setError(
-        `Gemini se rabta nahi ho saka. ` +
-        `${st.fixed}/${st.attempted} values theek huin, baqi par local Urdu lagi hai.` +
-        (reasons ? ` Wajah: ${reasons}` : '')
-      );
+      setError(t('busy.geminiFail', st.fixed, st.attempted) + (reasons ? ` ${reasons}` : ''));
     } else if (st.fixed > 0) {
-      setNotice(`Gemini ne ${st.fixed} naam/department/reason Urdu me theek kar diye.`);
+      setNotice(t('busy.geminiOk', st.fixed));
     }
   };
 
-  // Re-run Gemini smart fix on the ALREADY-UPLOADED rows with the current
-  // key/toggle — no re-upload needed. This is the prominent "Gemini se Urdu
-  // theek karwain" action shown on the Review step. Any failure keeps the
-  // local Urdu values untouched.
   const rerunSmartFix = async () => {
     const rawRows = forms.map((f) => f._raw).filter(Boolean);
     if (!rawRows.length) return;
     setError('');
     setBusy(true);
-    setBusyMsg('Gemini se naam aur department Urdu me theek kiye ja rahe hain...');
+    setBusyMsg(t('busy.rerun'));
     handleSmartFix(true);
     try {
       const rebuilt = await buildForms(rawRows, mapping || {}, {
@@ -498,20 +495,18 @@ export default function App() {
         smartFixOn: true,
         month: sheetMonth,
         year: sheetYear,
-        onProgress: (d, t) => setBusyMsg(`Gemini se Urdu theek ho rahi hai... ${d}/${t}`),
+        onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
       setForms(rebuilt);
       reportGeminiStats(rebuilt);
     } catch (e) {
-      setError('Smart fix nahi chal saka. Local Urdu wali values mehfooz hain.');
+      setError(t('busy.rerunFail'));
     } finally {
       setBusy(false);
       setBusyMsg('');
     }
   };
 
-  // Enrich every form with computed dates and resolved signature placements.
-  // Generate receives these ready-made ("already transliterated + dates computed").
   const printableForms = useMemo(() => {
     return forms.map((f) => {
       let leaveDate = null;
@@ -522,9 +517,6 @@ export default function App() {
       }
       let toDate = null;
       try {
-        // The upper date is the first working day AFTER the leave date.
-        // nextWorkingDay() already advances one day internally and skips
-        // Sundays + confirmed public holidays (Sundays must be remembered).
         toDate = leaveDate ? nextWorkingDay(leaveDate, holidays || []) : null;
       } catch (e) {
         toDate = null;
@@ -535,8 +527,6 @@ export default function App() {
         toDate: toDate ? fmt(toDate) : '',
         sigPlacements: (() => {
           const placements = resolvePlacements(f, signatures);
-          // Default HR signature is common to every form. A user-uploaded
-          // HR-position signature takes precedence when present.
           if (
             defaultHrSignUrl &&
             !placements.some((p) => p.position === 'hrManager')
@@ -550,198 +540,268 @@ export default function App() {
     });
   }, [forms, signatures, holidays, defaultHrSignUrl]);
 
-  // PIN gate: nothing of the app renders until the session unlocks.
+  const doSignOut = async () => {
+    await signOut();
+  };
+
+  // ---- Gates ----
+  if (!authReady) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#faf9f7] dark:bg-slate-950">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />
+      </div>
+    );
+  }
+  if (!user) {
+    return <AuthScreen lang={lang} onLang={changeLang} onAuth={(u) => setUser(u)} />;
+  }
   if (pinSet && !unlocked) {
     return <PinLock onUnlock={() => setUnlocked(true)} />;
   }
 
+  // ---- App shell (WAbot-style): sidebar on desktop, bottom nav on mobile ----
+  const NAV = [
+    { id: 'forms', label: t('nav.forms'), icon: '📋' },
+    { id: 'keys', label: t('nav.keys'), icon: '🔑' },
+    { id: 'signs', label: t('nav.signs'), icon: '✍️' },
+    { id: 'settings', label: t('nav.settings'), icon: '⚙️' },
+  ];
+  const FORM_STEPS = [t('steps.upload'), t('steps.review'), t('steps.generate')];
+  const userEmail = user.email || '';
+
+  const navBtn = (item, mobile) =>
+    mobile ? (
+      <button
+        key={item.id}
+        onClick={() => setView(item.id)}
+        className={
+          'flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[11px] font-bold transition ' +
+          (view === item.id
+            ? 'text-emerald-700 dark:text-emerald-400'
+            : 'text-zinc-400 dark:text-slate-500')
+        }
+      >
+        <span className="text-xl">{item.icon}</span>
+        {item.label}
+      </button>
+    ) : (
+      <button
+        key={item.id}
+        onClick={() => setView(item.id)}
+        className={
+          'flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ' +
+          (view === item.id
+            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+            : 'text-zinc-600 hover:bg-zinc-100 dark:text-slate-300 dark:hover:bg-slate-800')
+        }
+      >
+        <span className="text-lg">{item.icon}</span>
+        {item.label}
+      </button>
+    );
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="no-print bg-gradient-to-l from-emerald-700 via-emerald-700 to-emerald-800 text-white shadow-lg dark:from-emerald-950 dark:via-emerald-950 dark:to-slate-900">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-2xl shadow-inner ring-1 ring-white/25">
-              📋
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold leading-tight tracking-tight sm:text-2xl">Crown Leave Form App</h1>
-              <p className="text-xs text-emerald-100/90 sm:text-sm">Chutti ke form banayein, sign karein, print karein.</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={() => setDark(!dark)}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-white/15 text-xl text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
-              aria-label={dark ? 'Light mode' : 'Dark mode'}
-              title={dark ? 'Light mode' : 'Dark mode'}
-            >
-              {dark ? '☀️' : '🌙'}
-            </button>
-            <button
-              onClick={() => setStep(2)}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-white/15 text-xl text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
-              aria-label="Settings"
-              title="Settings"
-            >
-              ⚙️
-            </button>
-            {authReady && (
-              user ? (
-                <button
-                  onClick={async () => {
-                    if (window.confirm('Logout karna hai?')) {
-                      await signOut();
-                    }
-                  }}
-                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
-                  title={user.email || 'Logged in'}
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold uppercase dark:bg-emerald-600">
-                    {(user.email || '?')[0]}
-                  </span>
-                  <span className="hidden max-w-[90px] truncate sm:inline">
-                    {(user.email || '').split('@')[0]}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setAuthOpen(true)}
-                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
-                >
-                  👤 Login
-                </button>
-              )
-            )}
+    <div className="min-h-dvh bg-[#faf9f7] text-zinc-900 dark:bg-slate-950 dark:text-zinc-100 md:flex">
+      {/* Desktop sidebar */}
+      <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-zinc-200/70 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-900 md:flex">
+        <div className="mb-8 flex items-center gap-2.5 px-2">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-xl text-white shadow-md shadow-emerald-600/30">
+            📋
+          </span>
+          <div>
+            <p className="text-base font-extrabold tracking-tight">{t('appName')}</p>
+            <p className="text-[11px] text-zinc-400">{t('appTag')}</p>
           </div>
         </div>
-      </header>
-      {authOpen && (
-        <AuthModal
-          onClose={() => setAuthOpen(false)}
-          onAuth={(u) => {
-            userRef.current = u;
-            setUser(u);
-          }}
-        />
-      )}
+        <nav className="flex-1 space-y-1.5">{NAV.map((n) => navBtn(n, false))}</nav>
+        <div className="mt-6 rounded-2xl bg-zinc-50 p-3 dark:bg-slate-800">
+          <p className="truncate text-xs font-semibold text-zinc-500 dark:text-slate-400">
+            {t('user.signedInAs')}
+          </p>
+          <p className="truncate text-sm font-bold">{userEmail}</p>
+          <button
+            onClick={doSignOut}
+            className="mt-2 w-full rounded-full border border-zinc-200 bg-white py-1.5 text-xs font-bold text-zinc-600 transition hover:bg-zinc-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          >
+            {t('user.signOut')}
+          </button>
+        </div>
+      </aside>
 
-      <div className="no-print mx-auto max-w-6xl space-y-2 px-4 pt-3">
-        {!online && (
-          <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-            <span className="text-base">⚠️</span>
-            <span>Online save off hai. Signatures sirf is session ke liye kaam karein ge.</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <header className="no-print sticky top-0 z-20 flex items-center justify-between border-b border-zinc-200/70 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 md:hidden">
+          <div className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-lg text-white">
+              📋
+            </span>
+            <span className="text-base font-extrabold tracking-tight">{t('appName')}</span>
           </div>
-        )}
-
-        {notice && (
-          <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200">
-            <div className="flex items-start gap-2.5">
-              <span className="text-base">✅</span>
-              <span>{notice}</span>
-            </div>
-            <button onClick={() => setNotice('')} className="shrink-0 rounded-lg px-2 py-0.5 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900" aria-label="Band karein">
-              ✕
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => changeLang(lang === 'en' ? 'ur' : 'en')}
+              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              {lang === 'en' ? 'اردو' : 'EN'}
+            </button>
+            <button
+              onClick={doSignOut}
+              title={t('user.signOut')}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+            >
+              {userEmail ? userEmail[0].toUpperCase() : '•'}
             </button>
           </div>
-        )}
+        </header>
 
-        {error && (
-          <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-sm dark:border-red-900 dark:bg-red-950/60 dark:text-red-200">
-            <div className="flex items-start gap-2.5">
-              <span className="text-base">❌</span>
-              <span>{error}</span>
+        {/* Banners */}
+        <div className="no-print mx-auto w-full max-w-6xl space-y-2 px-4 pt-4">
+          {notice && (
+            <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200">
+              <span>✅ {notice}</span>
+              <button
+                onClick={() => setNotice('')}
+                className="shrink-0 rounded-lg px-2 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
             </div>
-            <button onClick={() => setError('')} className="shrink-0 rounded-lg px-2 py-0.5 font-semibold hover:bg-red-100 dark:hover:bg-red-900" aria-label="Band karein">
-              ✕
-            </button>
-          </div>
-        )}
-      </div>
+          )}
+          {error && (
+            <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/60 dark:text-red-200">
+              <span>❌ {error}</span>
+              <button
+                onClick={() => setError('')}
+                className="shrink-0 rounded-lg px-2 font-semibold hover:bg-red-100 dark:hover:bg-red-900"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
 
-      <div className="no-print mx-auto max-w-6xl px-4 pt-3">
-        <nav className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Steps">
-          <ol className="flex items-center">
-            {STEPS.map((label, i) => (
-              <li key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ' +
-                      (i < step
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                        : i === step
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-4 ring-emerald-600/20'
-                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400')
-                    }
-                  >
-                    {i < step ? '✓' : i + 1}
-                  </span>
-                  <span
-                    className={
-                      'truncate whitespace-nowrap text-xs font-semibold sm:text-sm ' +
-                      (i <= step ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500')
-                    }
-                  >
-                    {label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <span className="relative mx-2 h-1 min-w-4 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 sm:mx-3">
-                    <span
-                      className={'absolute inset-y-0 right-0 rounded-full bg-emerald-500 transition-all ' + (i < step ? 'left-0' : 'left-full')}
-                    />
-                  </span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      </div>
+        {/* Main */}
+        <main className="no-print mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-28 md:pb-10">
+          {view === 'forms' && (
+            <div>
+              <nav
+                className="mb-5 rounded-3xl bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-100 dark:bg-slate-900 dark:ring-slate-800"
+                aria-label="Steps"
+              >
+                <ol className="flex items-center">
+                  {FORM_STEPS.map((label, i) => (
+                    <li key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={
+                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ' +
+                            (i < step || (i === step && step === 2 && forms.length)
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                              : i === step
+                                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-4 ring-emerald-600/20'
+                                : 'bg-zinc-100 text-zinc-400 dark:bg-slate-800 dark:text-slate-500')
+                          }
+                        >
+                          {i < step ? '✓' : i + 1}
+                        </span>
+                        <span
+                          className={
+                            'truncate text-xs font-bold sm:text-sm ' +
+                            (i <= step
+                              ? 'text-zinc-900 dark:text-zinc-100'
+                              : 'text-zinc-400 dark:text-slate-500')
+                          }
+                        >
+                          {label}
+                        </span>
+                      </div>
+                      {i < FORM_STEPS.length - 1 && (
+                        <span className="relative mx-2 h-1 min-w-4 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-slate-800 sm:mx-3">
+                          <span
+                            className={
+                              'absolute inset-y-0 right-0 rounded-full bg-emerald-500 transition-all ' +
+                              (i < step ? 'left-0' : 'left-full')
+                            }
+                          />
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </nav>
 
-      <main className="no-print mx-auto max-w-6xl px-4 py-5">
-        {step === 0 && (
-          <Upload
-            onParsed={handleParsed}
-            month={sheetMonth}
-            year={sheetYear}
-            onMonthYear={(m, y) => {
-              setSheetMonth(m);
-              setSheetYear(y);
-            }}
-          />
-        )}
+              {step === 0 && (
+                <Upload
+                  lang={lang}
+                  onParsed={handleParsed}
+                  month={sheetMonth}
+                  year={sheetYear}
+                  onMonthYear={(m, y) => {
+                    setSheetMonth(m);
+                    setSheetYear(y);
+                  }}
+                />
+              )}
+              {step === 1 && (
+                <Review
+                  lang={lang}
+                  headers={headers}
+                  rows={forms}
+                  mapping={mapping || {}}
+                  onMappingChange={handleMappingChange}
+                  onRowsChange={setForms}
+                  onBack={() => setStep(0)}
+                  onContinue={() => setStep(2)}
+                  apiKeys={apiKeys}
+                  onManageKeys={() => setView('keys')}
+                  smartFixOn={smartFixOn}
+                  onSmartFix={handleSmartFix}
+                  onRerunSmartFix={rerunSmartFix}
+                  busy={busy}
+                />
+              )}
+              {step === 2 && (
+                <Generate
+                  lang={lang}
+                  forms={printableForms}
+                  signatures={signatures}
+                  onPrint={printHtmlDocument}
+                  onDownload={downloadHtmlDocument}
+                  onBack={() => setStep(1)}
+                  onNewBatch={() => {
+                    setForms([]);
+                    setHeaders([]);
+                    setMapping(null);
+                    setStep(0);
+                    setView('forms');
+                  }}
+                />
+              )}
+            </div>
+          )}
 
-        {step === 1 && (
-          <Review
-            headers={headers}
-            rows={forms}
-            mapping={mapping || {}}
-            onMappingChange={handleMappingChange}
-            onRowsChange={setForms}
-            onBack={() => setStep(0)}
-            onContinue={() => setStep(2)}
-            apiKeys={apiKeys}
-            onApiKeys={handleApiKeys}
-            smartFixOn={smartFixOn}
-            onSmartFix={handleSmartFix}
-            onRerunSmartFix={rerunSmartFix}
-            busy={busy}
-          />
-        )}
+          {view === 'keys' && (
+            <ApiKeysView lang={lang} apiKeys={apiKeys} onApiKeys={handleApiKeys} />
+          )}
 
-        {step === 2 && (
-          <div className="space-y-6">
-            <SignatureManager
+          {view === 'signs' && (
+            <SignaturesView
+              lang={lang}
               signatures={signatures}
               onChange={setSignatures}
-              defaultHrSignUrl={defaultHrSignUrl}
-              userId={user ? user.id : null}
+              userId={user.id}
             />
-            <Settings
+          )}
+
+          {view === 'settings' && (
+            <SettingsView
+              lang={lang}
+              onLang={changeLang}
+              dark={dark}
+              onDark={setDark}
               apiKeys={apiKeys}
-              onApiKeys={handleApiKeys}
-              smartFixOn={smartFixOn}
-              onSmartFix={handleSmartFix}
               holidays={holidays}
               onHolidays={setHolidays}
               sheetMonth={sheetMonth}
@@ -751,33 +811,14 @@ export default function App() {
                 setSheetYear(y);
               }}
             />
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={() => setStep(1)}
-                className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                ← Peeche
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
-              >
-                Aagay →
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </main>
 
-        {step === 3 && (
-          <Generate
-            forms={printableForms}
-            signatures={signatures}
-            onPrint={printHtmlDocument}
-            onDownload={downloadHtmlDocument}
-            onBack={() => setStep(2)}
-          />
-        )}
-      </main>
+        {/* Mobile bottom nav */}
+        <nav className="no-print fixed inset-x-0 bottom-0 z-20 border-t border-zinc-200/70 bg-white/95 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:hidden">
+          <div className="flex">{NAV.map((n) => navBtn(n, true))}</div>
+        </nav>
+      </div>
 
       {busy && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
@@ -786,17 +827,10 @@ export default function App() {
               <div className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600 dark:border-slate-700 dark:border-t-emerald-500" />
               <div className="absolute inset-0 flex items-center justify-center text-xl">⚙️</div>
             </div>
-            <p className="text-sm font-medium">{busyMsg || 'Kaam ho raha hai...'}</p>
+            <p className="text-sm font-medium">{busyMsg || t('busy.working')}</p>
           </div>
         </div>
       )}
-
-      <footer className="no-print mt-8 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 dark:text-slate-400">
-          <span>📋 Crown Leave Form App</span>
-          <span>Crown Textile ka internal tool</span>
-        </div>
-      </footer>
     </div>
   );
 }

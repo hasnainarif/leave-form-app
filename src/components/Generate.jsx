@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderForm, buildPrintableDocument, formStyles } from '../lib/printForm.js';
+import { tr } from '../lib/strings.js';
 
 // Shape handed to renderForm. The app form (see App.jsx) carries Urdu text
 // fields + pre-formatted leaveDate/toDate; renderForm expects the paper-form
@@ -120,7 +121,8 @@ function ScaledPreview({ html }) {
   );
 }
 
-export default function Generate({ forms, signatures, onPrint, onDownload, onBack }) {
+export default function Generate({ lang = 'en', forms, signatures, onPrint, onDownload, onBack, onNewBatch = () => {} }) {
+  const t = (k, ...a) => tr(lang, k, ...a);
   const logoDataUrl = useLogoDataUrl();
   const valid = useMemo(() => (forms || []).filter((f) => f._valid), [forms]);
   const skipped = (forms || []).length - valid.length;
@@ -139,17 +141,14 @@ export default function Generate({ forms, signatures, onPrint, onDownload, onBac
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
-        <h2 className="text-lg font-semibold">Print preview</h2>
+        <h2 className="text-lg font-semibold">{t('generate.preview')}</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          {valid.length} form tayyar {valid.length === 1 ? 'hai' : 'hain'}.
-          {signedCount > 0 && ruleCount > 0
-            ? ' ' + signedCount + ' form par dastakhat lagen ge.'
-            : ''}
+          {t('generate.ready', valid.length)}
+          {signedCount > 0 && ruleCount > 0 ? ' ' + t('generate.signed', signedCount) : ''}
         </p>
         {skipped > 0 && (
           <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            {skipped} row mein tareekh ka masla hai, is liye woh print nahi hongi.
-            Review step mein ja kar tareekh theek karein.
+            {t('generate.skipped', skipped)}
           </p>
         )}
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -158,32 +157,36 @@ export default function Generate({ forms, signatures, onPrint, onDownload, onBac
             disabled={valid.length === 0}
             className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Print / Save PDF
+            {t('generate.print')}
           </button>
           <button
             onClick={() => onDownload(docHTML)}
             disabled={valid.length === 0}
             className="rounded-lg border border-emerald-600 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950"
           >
-            Download printable file
+            {t('generate.download')}
           </button>
           <button
             onClick={onBack}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 hover:bg-zinc-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            Back
+            {t('back')}
+          </button>
+          <button
+            onClick={onNewBatch}
+            className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 hover:bg-zinc-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {t('generate.newBatch')}
           </button>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          Print dabane par A4 landscape layout khulega. Wahan Save as PDF chun kar
-          PDF bhi bana sakte hain. Download wali file ko baad mein bhi khol kar
-          print kiya ja sakta hai.
+          {t('generate.printNote')}
         </p>
       </section>
 
       {valid.length === 0 ? (
         <p className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          Koi printable form nahi hai.
+          {t('generate.empty')}
         </p>
       ) : (
         <div className="space-y-4">

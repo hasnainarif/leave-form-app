@@ -1,6 +1,6 @@
 // src/components/SignatureManager.jsx
 // Manage leave-form signature images.
-// Props: { signatures, onChange }
+// Props: { lang, signatures, onChange }
 //   signatures: array of { id, label, imageUrl, position, conditionField, conditionOp, conditionValue }
 //   onChange: (signatures) => void
 // On mount, if Supabase is configured, loads signatures from the DB and calls onChange.
@@ -14,24 +14,7 @@ import {
   deleteSignature,
   uploadSignatureImage,
 } from '../lib/supabase.js';
-
-const POSITIONS = [
-  { value: 'employee', label: 'دستخط ملازم' },
-  { value: 'dept_head', label: 'ڈیپارٹمنٹ ہیڈ' },
-  { value: 'hr', label: 'ایچ آر مینیجر' },
-  { value: 'custom', label: 'Custom' },
-];
-
-const CONDITION_FIELDS = [
-  { value: 'department', label: 'Department' },
-  { value: 'designation', label: 'Designation' },
-  { value: 'reason', label: 'Reason' },
-];
-
-const CONDITION_OPS = [
-  { value: 'contains', label: 'contains' },
-  { value: 'equals', label: 'equals' },
-];
+import { tr } from '../lib/strings.js';
 
 const emptyDraft = () => ({
   file: null,
@@ -43,28 +26,50 @@ const emptyDraft = () => ({
   value: '',
 });
 
-// Plain-language summary so the user can SEE which sign goes where and when:
-// "konsa sign kab use hoga" — position decides the line on the form,
-// the rule decides which forms. Empty rule = every form.
-function describeSig(sig) {
-  const pos =
-    (POSITIONS.find((p) => p.value === (sig.position || 'dept_head')) || {}).label ||
-    'Department Head';
-  const needle = String(sig.conditionValue || sig.value || '').trim();
-  if (!needle) return `${pos} ki line par lagega, har form par.`;
-  const field =
-    (CONDITION_FIELDS.find((f) => f.value === (sig.conditionField || sig.field)) || {})
-      .label || 'Department';
-  const opText = (sig.conditionOp || sig.op) === 'equals' ? 'ke barabar ho' : 'contain karta ho';
-  return `${pos} ki line par lagega, sirf jab ${field} "${needle}" ${opText}.`;
-}
-
 export default function SignatureManager({
+  lang = 'en',
   signatures = [],
   onChange = () => {},
   defaultHrSignUrl = null,
   userId = null,
 }) {
+  const t = (k, ...a) => tr(lang, k, ...a);
+
+  const POSITIONS = [
+    { value: 'employee', label: t('signs.posEmployee') },
+    { value: 'dept_head', label: t('signs.posDeptHead') },
+    { value: 'hr', label: t('signs.posHr') },
+    { value: 'custom', label: t('signs.posCustom') },
+  ];
+
+  const CONDITION_FIELDS = [
+    { value: 'department', label: t('signs.fldDepartment') },
+    { value: 'designation', label: t('signs.fldDesignation') },
+    { value: 'reason', label: t('signs.fldReason') },
+  ];
+
+  const CONDITION_OPS = [
+    { value: 'contains', label: t('signs.opContains') },
+    { value: 'equals', label: t('signs.opEquals') },
+  ];
+
+  // Plain-language summary so the user can SEE which sign goes where and when:
+  // position decides the line on the form, the rule decides which forms.
+  // Empty rule = every form.
+  const describeSig = (sig) => {
+    const pos =
+      (POSITIONS.find((p) => p.value === (sig.position || 'dept_head')) || {}).label ||
+      t('signs.posDeptHead');
+    const needle = String(sig.conditionValue || sig.value || '').trim();
+    if (!needle) return t('signs.ruleAll', pos);
+    const field =
+      (CONDITION_FIELDS.find((f) => f.value === (sig.conditionField || sig.field)) || {})
+        .label || t('signs.fldDepartment');
+    const opText =
+      (sig.conditionOp || sig.op) === 'equals' ? t('signs.opEqualsText') : t('signs.opContainsText');
+    return t('signs.ruleWhen', pos, field, needle, opText);
+  };
+
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(emptyDraft());
@@ -84,13 +89,13 @@ export default function SignatureManager({
           onChange(rows);
           setNotice('');
         } else {
-          setNotice('Supabase se load nahi ho saka. Is session ke liye local mode me chal raha hai.');
+          setNotice(t('signs.loadFail'));
         }
       } else if (isConfigured() && !userId) {
         onChange([]);
-        setNotice('Login karein taake signatures aap ke account se sync hon.');
+        setNotice(t('signs.loginPrompt'));
       } else {
-        setNotice('Signatures saved for this session only. Connect Supabase for permanent save.');
+        setNotice(t('signs.sessionOnly'));
       }
       setLoading(false);
     })();
@@ -134,7 +139,7 @@ export default function SignatureManager({
       if (draft.preview && draft.preview.startsWith('blob:')) URL.revokeObjectURL(draft.preview);
       setDraft(emptyDraft());
     } catch (e) {
-      setError(e && e.message ? e.message : 'Save nahi ho saka. Dobara try karein.');
+      setError(e && e.message ? e.message : t('signs.saveFail'));
     } finally {
       setSaving(false);
     }
@@ -164,7 +169,7 @@ export default function SignatureManager({
       }
       onChange([...signatures, sig]);
     } catch (e) {
-      setError('Replace nahi ho saka. Dobara try karein.');
+      setError(t('signs.replaceFail'));
     } finally {
       setSaving(false);
     }
@@ -180,7 +185,7 @@ export default function SignatureManager({
       if (saved) {
         onChange(signatures.map((s) => (s.id === sig.id ? saved : s)));
       } else {
-        setError('Signature save nahi ho saki. Dobara try karein.');
+        setError(t('signs.saveFail'));
       }
     } finally {
       setBusyId(null);
@@ -188,13 +193,13 @@ export default function SignatureManager({
   };
 
   const removeSig = async (sig) => {
-    if (!window.confirm('Is signature ko delete karein?')) return;
+    if (!window.confirm(t('signs.confirmDelete'))) return;
     setBusyId(sig.id);
     try {
       if (isConfigured() && !String(sig.id).startsWith('local-')) {
         const ok = await deleteSignature(sig.id);
         if (!ok) {
-          setError('Delete nahi ho saka. Dobara try karein.');
+          setError(t('signs.deleteFail'));
           return;
         }
       }
@@ -206,12 +211,8 @@ export default function SignatureManager({
 
   return (
     <div style={s.wrap}>
-      <h3 style={s.h3}>Signatures</h3>
-      <p style={s.explainer}>
-        Har sign ke liye 2 cheezein batayein: <b>Position</b> (form par kis line par
-        lagega) aur <b>Rule</b> (kab lagega). Rule khaali ho to wo sign har form par
-        lagega. Neeche har sign ke saath wazeh likha hai ke wo kab use hoga.
-      </p>
+      <h3 style={s.h3}>{t('signs.title')}</h3>
+      <p style={s.explainer}>{t('signs.explainer')}</p>
       {notice && <div style={s.notice}>{notice}</div>}
       {error && <div style={s.error}>{error}</div>}
 
@@ -222,17 +223,18 @@ export default function SignatureManager({
             <img src={defaultHrSignUrl} alt="Default HR signature" style={s.thumb} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, color: 'var(--clf-text)' }}>
-                HR Manager<span style={s.badge}>Default</span>
+                {t('signs.posHr')}
+                <span style={s.badge}>{t('signs.defaultBadge')}</span>
               </div>
               <div style={{ fontSize: 13, color: 'var(--clf-text-dim)', marginTop: 4 }}>
-                Ye HR ka sign hai, sab forms me common lagega.
+                {t('signs.defaultHrNote')}
               </div>
             </div>
           </div>
-          <div style={s.ruleLine}>ایچ آر مینیجر ki line par lagega, har form par.</div>
+          <div style={s.ruleLine}>{describeSig({ position: 'hr' })}</div>
           <div style={s.btnRow}>
             <label style={{ ...s.smallBtn, textAlign: 'center' }}>
-              {saving ? 'Saving...' : 'Replace karein (naya sign upload karein)'}
+              {saving ? t('signs.saving') : t('signs.replace')}
               <input
                 type="file"
                 accept="image/png,image/jpeg"
@@ -255,7 +257,7 @@ export default function SignatureManager({
             {draft.preview ? (
               <img src={draft.preview} alt="Signature preview" style={s.thumb} />
             ) : (
-              <span style={s.uploadHint}>PNG / JPG upload karein</span>
+              <span style={s.uploadHint}>{t('signs.uploadHint')}</span>
             )}
             <input
               type="file"
@@ -267,7 +269,7 @@ export default function SignatureManager({
           <div style={{ flex: 1, minWidth: 0 }}>
             <input
               style={s.input}
-              placeholder="Label, masalan Dept Head Sign"
+              placeholder={t('signs.labelPh')}
               value={draft.label}
               onChange={(e) => setDraft({ ...draft, label: e.target.value })}
             />
@@ -309,22 +311,22 @@ export default function SignatureManager({
           </select>
           <input
             style={{ ...s.input, flex: 1.4 }}
-            placeholder="e.g. STITCHING"
+            placeholder={t('signs.valuePh')}
             value={draft.value}
             onChange={(e) => setDraft({ ...draft, value: e.target.value })}
           />
         </div>
         <div style={s.ruleLine}>{describeSig(draft)}</div>
         <button style={s.primaryBtn} onClick={saveNew} disabled={!draft.file || saving}>
-          {saving ? 'Saving...' : 'Signature save karein'}
+          {saving ? t('signs.saving') : t('signs.save')}
         </button>
       </div>
 
       {/* Existing signatures */}
       {loading ? (
-        <p style={s.muted}>Loading...</p>
+        <p style={s.muted}>{t('signs.loading')}</p>
       ) : signatures.length === 0 ? (
-        <p style={s.muted}>Abhi koi signature nahi hai. Upar se naya add karein.</p>
+        <p style={s.muted}>{t('signs.empty')}</p>
       ) : (
         signatures.map((sig) => (
           <div key={sig.id} style={s.card}>
@@ -378,7 +380,7 @@ export default function SignatureManager({
               </select>
               <input
                 style={{ ...s.input, flex: 1.4 }}
-                placeholder="e.g. STITCHING"
+                placeholder={t('signs.valuePh')}
                 value={sig.conditionValue || ''}
                 onChange={(e) => updateSig(sig.id, { conditionValue: e.target.value })}
               />
@@ -389,16 +391,16 @@ export default function SignatureManager({
                 style={s.smallBtn}
                 onClick={() => persistSig(sig)}
                 disabled={busyId === sig.id || !isConfigured()}
-                title={isConfigured() ? 'Database me save karein' : 'Session memory me already saved hai'}
+                title={isConfigured() ? t('signs.saveTitle') : t('signs.sessionSavedTitle')}
               >
-                {busyId === sig.id ? 'Saving...' : isConfigured() ? 'Save' : 'Saved'}
+                {busyId === sig.id ? t('signs.saving') : isConfigured() ? t('signs.saveDb') : t('signs.saved')}
               </button>
               <button
                 style={{ ...s.smallBtn, ...s.dangerBtn }}
                 onClick={() => removeSig(sig)}
                 disabled={busyId === sig.id}
               >
-                Delete
+                {t('signs.delete')}
               </button>
             </div>
           </div>
