@@ -139,7 +139,7 @@ export default function Review({
         </div>
       </section>
 
-      <section className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900 sm:p-6">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
         <h2 className="text-lg font-semibold">Column mapping</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Har field ke liye sahi column chunein. Name aur Date lazmi hain.
@@ -168,7 +168,7 @@ export default function Review({
         </div>
       </section>
 
-      <section className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900 sm:p-6">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
         <h2 className="text-lg font-semibold">Rows ({(rows || []).length})</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Urdu text yahan theek kar sakte hain. Print se pehle aik nazar dekh lein.

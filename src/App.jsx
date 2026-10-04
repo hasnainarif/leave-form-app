@@ -520,17 +520,22 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="no-print bg-emerald-700 text-white dark:bg-emerald-900">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold sm:text-2xl">Crown Leave Form App</h1>
-            <p className="text-sm text-emerald-100 dark:text-emerald-200">Chutti ke form banayein, sign karein, print karein.</p>
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header className="no-print bg-gradient-to-l from-emerald-700 via-emerald-700 to-emerald-800 text-white shadow-lg dark:from-emerald-950 dark:via-emerald-950 dark:to-slate-900">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-2xl shadow-inner ring-1 ring-white/25">
+              📋
+            </div>
+            <div>
+              <h1 className="text-lg font-extrabold leading-tight tracking-tight sm:text-2xl">Crown Leave Form App</h1>
+              <p className="text-xs text-emerald-100/90 sm:text-sm">Chutti ke form banayein, sign karein, print karein.</p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={() => setDark(!dark)}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-800 text-xl text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-white/15 text-xl text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
               aria-label={dark ? 'Light mode' : 'Dark mode'}
               title={dark ? 'Light mode' : 'Dark mode'}
             >
@@ -538,7 +543,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setStep(2)}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-800 text-xl text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-white/15 text-xl text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
               aria-label="Settings"
               title="Settings"
             >
@@ -552,7 +557,7 @@ export default function App() {
                       await signOut();
                     }
                   }}
-                  className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
                   title={user.email || 'Logged in'}
                 >
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold uppercase dark:bg-emerald-600">
@@ -565,7 +570,7 @@ export default function App() {
               ) : (
                 <button
                   onClick={() => setAuthOpen(true)}
-                  className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-semibold text-white ring-1 ring-emerald-500 hover:bg-emerald-600 dark:bg-slate-800 dark:ring-slate-600 dark:hover:bg-slate-700"
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 active:scale-95"
                 >
                   👤 Login
                 </button>
@@ -584,67 +589,80 @@ export default function App() {
         />
       )}
 
-      {!online && (
-        <div className="no-print bg-amber-100 text-amber-900">
-          <div className="mx-auto max-w-6xl px-4 py-2 text-sm">
-            Online save off hai. Signatures sirf is session ke liye kaam karein ge.
+      <div className="no-print mx-auto max-w-6xl space-y-2 px-4 pt-3">
+        {!online && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+            <span className="text-base">⚠️</span>
+            <span>Online save off hai. Signatures sirf is session ke liye kaam karein ge.</span>
           </div>
-        </div>
-      )}
+        )}
 
-      {notice && (
-        <div className="no-print bg-green-100 text-green-900">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-sm">
-            <span>{notice}</span>
-            <button onClick={() => setNotice('')} className="shrink-0 font-semibold underline">
-              Band karein
+        {notice && (
+          <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200">
+            <div className="flex items-start gap-2.5">
+              <span className="text-base">✅</span>
+              <span>{notice}</span>
+            </div>
+            <button onClick={() => setNotice('')} className="shrink-0 rounded-lg px-2 py-0.5 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900" aria-label="Band karein">
+              ✕
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {error && (
-        <div className="no-print bg-red-100 text-red-900">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-sm">
-            <span>{error}</span>
-            <button onClick={() => setError('')} className="shrink-0 font-semibold underline">
-              Band karein
+        {error && (
+          <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-sm dark:border-red-900 dark:bg-red-950/60 dark:text-red-200">
+            <div className="flex items-start gap-2.5">
+              <span className="text-base">❌</span>
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError('')} className="shrink-0 rounded-lg px-2 py-0.5 font-semibold hover:bg-red-100 dark:hover:bg-red-900" aria-label="Band karein">
+              ✕
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <nav className="no-print border-b bg-white dark:border-slate-800 dark:bg-slate-900" aria-label="Steps">
-        <ol className="mx-auto flex max-w-6xl items-center px-4 py-3">
-          {STEPS.map((label, i) => (
-            <li key={label} className="flex min-w-0 flex-1 items-center">
-              <span
-                className={
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
-                  (i < step
-                    ? 'bg-emerald-600 text-white'
-                    : i === step
-                      ? 'bg-emerald-100 text-emerald-800 ring-2 ring-emerald-600 dark:bg-emerald-900 dark:text-emerald-200'
-                      : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300')
-                }
-              >
-                {i < step ? '✓' : i + 1}
-              </span>
-              <span
-                className={
-                  'ml-1 truncate whitespace-nowrap text-[11px] font-medium sm:ml-2 sm:text-sm ' +
-                  (i === step ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400')
-                }
-              >
-                {label}
-              </span>
-              {i < STEPS.length - 1 && <span className="mx-1 h-px min-w-2 flex-1 bg-slate-200 dark:bg-slate-800 sm:mx-2" />}
-            </li>
-          ))}
-        </ol>
-      </nav>
+      <div className="no-print mx-auto max-w-6xl px-4 pt-3">
+        <nav className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Steps">
+          <ol className="flex items-center">
+            {STEPS.map((label, i) => (
+              <li key={label} className="flex min-w-0 flex-1 items-center last:flex-none">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className={
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ' +
+                      (i < step
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                        : i === step
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-4 ring-emerald-600/20'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400')
+                    }
+                  >
+                    {i < step ? '✓' : i + 1}
+                  </span>
+                  <span
+                    className={
+                      'truncate whitespace-nowrap text-xs font-semibold sm:text-sm ' +
+                      (i <= step ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500')
+                    }
+                  >
+                    {label}
+                  </span>
+                </div>
+                {i < STEPS.length - 1 && (
+                  <span className="relative mx-2 h-1 min-w-4 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 sm:mx-3">
+                    <span
+                      className={'absolute inset-y-0 right-0 rounded-full bg-emerald-500 transition-all ' + (i < step ? 'left-0' : 'left-full')}
+                    />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </div>
 
-      <main className="no-print mx-auto max-w-6xl px-4 py-6">
+      <main className="no-print mx-auto max-w-6xl px-4 py-5">
         {step === 0 && (
           <Upload
             onParsed={handleParsed}
@@ -700,15 +718,15 @@ export default function App() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => setStep(1)}
-                className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                Peeche
+                ← Peeche
               </button>
               <button
                 onClick={() => setStep(3)}
-                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
               >
-                Aagay
+                Aagay →
               </button>
             </div>
           </div>
@@ -726,17 +744,21 @@ export default function App() {
       </main>
 
       {busy && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="rounded-lg bg-white px-6 py-5 text-center shadow-xl dark:bg-slate-900">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-            <p className="text-sm">{busyMsg || 'Kaam ho raha hai...'}</p>
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xs rounded-3xl bg-white px-6 py-6 text-center shadow-2xl dark:bg-slate-900">
+            <div className="relative mx-auto mb-4 h-14 w-14">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600 dark:border-slate-700 dark:border-t-emerald-500" />
+              <div className="absolute inset-0 flex items-center justify-center text-xl">⚙️</div>
+            </div>
+            <p className="text-sm font-medium">{busyMsg || 'Kaam ho raha hai...'}</p>
           </div>
         </div>
       )}
 
-      <footer className="no-print border-t bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-slate-500 dark:text-slate-400">
-          Crown Textile ke liye banaya gaya internal tool.
+      <footer className="no-print mt-8 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 dark:text-slate-400">
+          <span>📋 Crown Leave Form App</span>
+          <span>Crown Textile ka internal tool</span>
         </div>
       </footer>
     </div>

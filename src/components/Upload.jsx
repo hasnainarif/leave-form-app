@@ -50,13 +50,20 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
   for (let y = thisYear - 2; y <= thisYear + 2; y++) years.push(y);
 
   return (
-    <section className="rounded-lg bg-white p-4 shadow-sm dark:bg-slate-900 sm:p-8">
-      <h2 className="text-lg font-semibold">Excel file upload karein</h2>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        Sick leave register wali file yahan dein. .xlsx, .xls ya .csv sab chalenge.
-      </p>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-2xl dark:bg-emerald-900/50">
+          📤
+        </div>
+        <div>
+          <h2 className="text-lg font-extrabold tracking-tight">Excel file upload karein</h2>
+          <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+            Sick leave register wali file yahan dein. .xlsx, .xls ya .csv sab chalenge.
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
           Ye register kis month ka hai?
         </p>
@@ -111,13 +118,16 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
           if (inputRef.current) inputRef.current.click();
         }}
         className={
-          'mt-4 cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition sm:p-12 ' +
+          'mt-5 cursor-pointer rounded-3xl border-2 border-dashed p-8 text-center transition sm:p-12 ' +
           (dragOver
-            ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950'
-            : 'border-slate-300 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50/50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-emerald-950/40')
+            ? 'scale-[1.01] border-emerald-600 bg-emerald-50 dark:bg-emerald-950'
+            : 'border-slate-300 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50/50 dark:border-slate-600 dark:bg-slate-800/60 dark:hover:bg-emerald-950/40')
         }
       >
-        <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">File chunein ya yahan drop karein</p>
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-3xl dark:bg-emerald-900/50">
+          📁
+        </div>
+        <p className="text-base font-bold text-slate-800 dark:text-slate-100">File chunein ya yahan drop karein</p>
         <p className="mt-1 text-sm text-slate-500">Phone se bhi file select ho jayegi.</p>
         <input
           ref={inputRef}
@@ -138,7 +148,7 @@ export default function Upload({ onParsed, month, year, onMonthYear }) {
         <p className="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 sm:text-sm">
+      <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-400 sm:text-sm">
         <p className="font-semibold">File mein ye columns hone chahiye:</p>
         <p className="mt-1">
           Ecode, Name, Father, Designation, Department, Date, Reason. Naam thore
