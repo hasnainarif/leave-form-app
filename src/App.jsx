@@ -4,6 +4,8 @@ import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
 import SignatureManager from './components/SignatureManager.jsx';
 import Settings from './components/Settings.jsx';
+import PinLock from './components/PinLock.jsx';
+import { hasPin } from './lib/pin.js';
 import { transliterateRow } from './lib/transliterate.js';
 import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
@@ -288,6 +290,12 @@ export default function App() {
     }
   }, [dark]);
 
+  // App PIN lock: when a PIN is set, the whole app stays behind the
+  // lock screen until this session unlocks. Session-only: a fresh page
+  // load locks again.
+  const [pinSet] = useState(hasPin);
+  const [unlocked, setUnlocked] = useState(() => !hasPin());
+
   // Row data (this is the only thing a new upload refreshes).
   const [headers, setHeaders] = useState([]);
   const [mapping, setMapping] = useState(null);
@@ -459,6 +467,11 @@ export default function App() {
       };
     });
   }, [forms, signatures, holidays, defaultHrSignUrl]);
+
+  // PIN gate: nothing of the app renders until the session unlocks.
+  if (pinSet && !unlocked) {
+    return <PinLock onUnlock={() => setUnlocked(true)} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">

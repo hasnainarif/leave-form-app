@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { fetchKarachiHolidays } from '../lib/gemini.js';
 import { isConfigured, fetchHolidays, saveHolidays } from '../lib/supabase.js';
+import { hasPin, verifyPin, setPin, clearPin } from '../lib/pin.js';
 
 // Normalize whatever the sibling's fetchKarachiHolidays returns into YYYY-MM-DD strings.
 function normalizeDates(raw) {
@@ -91,6 +92,83 @@ export default function Settings({
   };
   const removeKey = (k) => {
     onApiKeys(keyList.filter((x) => x !== k));
+  };
+
+  // ---- App PIN lock ----
+  const [pinSet, setPinSet] = useState(false);
+  const [pinOld, setPinOld] = useState('');
+  const [pinNew, setPinNew] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinMsg, setPinMsg] = useState('');
+  const [pinMsgOk, setPinMsgOk] = useState(false);
+  const sayPin = (msg, ok) => {
+    setPinMsg(msg);
+    setPinMsgOk(!!ok);
+  };
+  const resetPinFields = () => {
+    setPinOld('');
+    setPinNew('');
+    setPinConfirm('');
+  };
+  useEffect(() => {
+    setPinSet(hasPin());
+  }, []);
+  const saveNewPin = async () => {
+    if (pinNew.length < 4 || pinNew !== pinConfirm) {
+      sayPin('PIN kam az kam 4 hindse hon aur dono ek jaise hon.', false);
+      return;
+    }
+    setPinBusy(true);
+    try {
+      await setPin(pinNew);
+      setPinSet(true);
+      resetPinFields();
+      sayPin('PIN laga diya gaya. Agli dafa app kholne par manga jayega.', true);
+    } catch (e) {
+      sayPin('PIN save nahi ho saka.', false);
+    } finally {
+      setPinBusy(false);
+    }
+  };
+  const changePin = async () => {
+    if (pinOld.length < 4 || pinNew.length < 4) {
+      sayPin('Purana aur naya dono PIN kam az kam 4 hindse hon.', false);
+      return;
+    }
+    setPinBusy(true);
+    try {
+      const ok = await verifyPin(pinOld);
+      if (!ok) {
+        sayPin('Purana PIN ghalat hai.', false);
+        return;
+      }
+      await setPin(pinNew);
+      resetPinFields();
+      sayPin('PIN tabdeel kar diya gaya.', true);
+    } finally {
+      setPinBusy(false);
+    }
+  };
+  const removePin = async () => {
+    if (pinOld.length < 4) {
+      sayPin('Khatam karne ke liye purana PIN dein.', false);
+      return;
+    }
+    setPinBusy(true);
+    try {
+      const ok = await verifyPin(pinOld);
+      if (!ok) {
+        sayPin('Purana PIN ghalat hai.', false);
+        return;
+      }
+      clearPin();
+      setPinSet(false);
+      resetPinFields();
+      sayPin('PIN khatam kar diya gaya.', true);
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   const loadFromGemini = async () => {
@@ -192,6 +270,96 @@ export default function Settings({
           Smart Urdu fix aapki key ke sath gemini-2.5-flash-lite use karta hai. Cheapest model,
           minimal tokens.
         </p>
+      </section>
+
+      {/* App PIN lock */}
+      <section style={s.section}>
+        <h3 style={s.h3}>App PIN lock</h3>
+        {!pinSet ? (
+          <>
+            <p style={s.note}>
+              PIN lagane ke baad app kholne par PIN manga jayega. Link public
+              rehne ke bawajood baghair PIN koi andar nahi aa sakega.
+            </p>
+            <label style={s.fieldLabel}>Naya PIN (4 se 8 hindse)</label>
+            <div style={s.row}>
+              <input
+                type="password"
+                inputMode="numeric"
+                style={{ ...s.input, flex: 1 }}
+                placeholder="••••"
+                value={pinNew}
+                onChange={(e) => setPinNew(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                autoComplete="off"
+              />
+            </div>
+            <label style={{ ...s.fieldLabel, marginTop: 8 }}>PIN dobara likhein</label>
+            <div style={s.row}>
+              <input
+                type="password"
+                inputMode="numeric"
+                style={{ ...s.input, flex: 1 }}
+                placeholder="••••"
+                value={pinConfirm}
+                onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                autoComplete="off"
+              />
+              <button
+                style={{ ...s.btn, opacity: pinNew.length >= 4 && pinNew === pinConfirm ? 1 : 0.5 }}
+                onClick={saveNewPin}
+                disabled={!(pinNew.length >= 4 && pinNew === pinConfirm) || pinBusy}
+              >
+                {pinBusy ? '...' : 'PIN set karein'}
+              </button>
+            </div>
+            {pinMsg && <p style={{ ...s.note, color: pinMsgOk ? 'green' : 'red' }}>{pinMsg}</p>}
+          </>
+        ) : (
+          <>
+            <p style={s.note}>PIN laga hua hai. Tabdeel ya khatam karne ke liye purana PIN dein.</p>
+            <label style={s.fieldLabel}>Purana PIN</label>
+            <div style={s.row}>
+              <input
+                type="password"
+                inputMode="numeric"
+                style={{ ...s.input, flex: 1 }}
+                placeholder="••••"
+                value={pinOld}
+                onChange={(e) => setPinOld(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                autoComplete="off"
+              />
+            </div>
+            <label style={{ ...s.fieldLabel, marginTop: 8 }}>Naya PIN (tabdeeli ke liye)</label>
+            <div style={s.row}>
+              <input
+                type="password"
+                inputMode="numeric"
+                style={{ ...s.input, flex: 1 }}
+                placeholder="••••"
+                value={pinNew}
+                onChange={(e) => setPinNew(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                autoComplete="off"
+              />
+              <button
+                style={{ ...s.btn, opacity: pinOld.length >= 4 && pinNew.length >= 4 ? 1 : 0.5 }}
+                onClick={changePin}
+                disabled={!(pinOld.length >= 4 && pinNew.length >= 4) || pinBusy}
+              >
+                {pinBusy ? '...' : 'Tabdeel karein'}
+              </button>
+            </div>
+            <div style={{ ...s.row, marginTop: 8 }}>
+              <button
+                style={{ ...s.btn, ...s.ghostBtn, flex: '1 1 auto' }}
+                onClick={removePin}
+                disabled={pinOld.length < 4 || pinBusy}
+              >
+                PIN khatam karein
+              </button>
+            </div>
+            {pinMsg && <p style={{ ...s.note, color: pinMsgOk ? 'green' : 'red' }}>{pinMsg}</p>}
+          </>
+        )}
       </section>
 
       {/* Public holidays */}
