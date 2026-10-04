@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { fetchKarachiHolidays } from '../lib/gemini.js';
 import { isConfigured, fetchHolidays, saveHolidays } from '../lib/supabase.js';
 import { hasPin, verifyPin, setPin, clearPin } from '../lib/pin.js';
+import { testKey } from '../lib/gemini.js';
 
 // Normalize whatever the sibling's fetchKarachiHolidays returns into YYYY-MM-DD strings.
 function normalizeDates(raw) {
@@ -40,6 +41,19 @@ export default function Settings({
   const [keyAdded, setKeyAdded] = useState(false);
   const [bulkKeys, setBulkKeys] = useState('');
   const [bulkAdded, setBulkAdded] = useState(false);
+  // key -> { st: 'testing' | 'ok' | 'bad', ms, error }
+  const [keyStatus, setKeyStatus] = useState({});
+  const runKeyTest = async (k) => {
+    setKeyStatus((m) => ({ ...m, [k]: { st: 'testing' } }));
+    const r = await testKey(k);
+    setKeyStatus((m) => ({
+      ...m,
+      [k]: r.ok ? { st: 'ok', ms: r.ms } : { st: 'bad', error: r.error },
+    }));
+  };
+  const testAllKeys = () => {
+    keyList.forEach((k) => runKeyTest(k));
+  };
   const keyList = Array.isArray(apiKeys) ? apiKeys : [];
   const maskKey = (k) => {
     const s = String(k || '');
@@ -87,7 +101,10 @@ export default function Settings({
   const addKey = () => {
     const k = keyInput.trim();
     if (!k) return;
-    if (!keyList.includes(k)) onApiKeys([...keyList, k]);
+    if (!keyList.includes(k)) {
+      onApiKeys([...keyList, k]);
+      runKeyTest(k);
+    }
     setKeyInput('');
     setKeyAdded(true);
     setTimeout(() => setKeyAdded(false), 2000);
@@ -102,6 +119,7 @@ export default function Settings({
       .filter((x) => x && !keyList.includes(x));
     if (!fresh.length) return;
     onApiKeys([...keyList, ...fresh]);
+    fresh.forEach((k) => runKeyTest(k));
     setBulkKeys('');
     setBulkAdded(true);
     setTimeout(() => setBulkAdded(false), 2500);
@@ -243,14 +261,41 @@ export default function Settings({
       {/* Gemini API keys (multiple) */}
       <section style={s.section}>
         <h3 style={s.h3}>Gemini API keys</h3>
-        {keyList.map((k) => (
-          <div key={k} style={{ ...s.row, marginTop: 6 }}>
-            <span style={{ ...s.input, flex: 1, fontFamily: 'monospace' }}>🔑 {maskKey(k)}</span>
-            <button style={{ ...s.btn, ...s.ghostBtn }} onClick={() => removeKey(k)}>
-              Hatayein
+        {keyList.length > 0 && (
+          <div style={{ ...s.row, marginTop: 6 }}>
+            <button style={{ ...s.btn, ...s.ghostBtn, flex: '1 1 auto' }} onClick={testAllKeys}>
+              Sab keys test karein
             </button>
           </div>
-        ))}
+        )}
+        {keyList.map((k) => {
+          const st = keyStatus[k] || {};
+          const dot = st.st === 'ok' ? '🟢' : st.st === 'bad' ? '🔴' : st.st === 'testing' ? '⏳' : '⚪';
+          return (
+            <div key={k} style={{ marginTop: 6 }}>
+              <div style={s.row}>
+                <span style={{ ...s.input, flex: 1, fontFamily: 'monospace' }}>
+                  {dot} 🔑 {maskKey(k)}
+                  {st.st === 'ok' && st.ms != null && (
+                    <span style={{ color: 'green' }}> ({(st.ms / 1000).toFixed(1)}s)</span>
+                  )}
+                </span>
+                <button style={{ ...s.btn, ...s.ghostBtn }} onClick={() => runKeyTest(k)}>
+                  Test
+                </button>
+                <button style={{ ...s.btn, ...s.ghostBtn }} onClick={() => removeKey(k)}>
+                  Hatayein
+                </button>
+              </div>
+              {st.st === 'bad' && st.error && (
+                <p style={{ ...s.note, color: 'red', marginTop: 2 }}>Key kaam nahi kar rahi: {st.error}</p>
+              )}
+              {st.st === 'ok' && (
+                <p style={{ ...s.note, color: 'green', marginTop: 2 }}>Key theek kaam kar rahi hai ✓</p>
+              )}
+            </div>
+          );
+        })}
         <div style={{ ...s.row, marginTop: keyList.length ? 6 : 0 }}>
           <input
             type="password"

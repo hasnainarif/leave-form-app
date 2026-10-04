@@ -268,6 +268,23 @@ export async function smartUrduFix(texts, kinds, apiKeys, onProgress) {
 }
 
 /**
+ * Test one API key with a tiny prompt. Returns { ok, ms } or { ok:false, error }.
+ * Used when a key is added and by the per-key Test button, so the user
+ * immediately sees whether the key actually works.
+ */
+export async function testKey(key) {
+  const k = String(key || '').trim();
+  if (!k) return { ok: false, error: 'Khali key' };
+  const t0 = Date.now();
+  try {
+    await geminiJson('Reply with exactly this JSON and nothing else: ["OK"]', k, 50);
+    return { ok: true, ms: Date.now() - t0 };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Test fail ho gaya' };
+  }
+}
+
+/**
  * List official government public holidays in Karachi, Sindh, Pakistan for
  * a given month ('YYYY-MM'). Returns string[] of 'YYYY-MM-DD'.
  * Throws on any failure so the caller can fall back to Sunday-only logic.
