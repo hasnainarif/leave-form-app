@@ -9,7 +9,7 @@ import { hasPin } from './lib/pin.js';
 import { transliterateRow } from './lib/transliterate.js';
 import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
-import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays } from './lib/supabase.js';
+import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays, fetchApiKeys, saveApiKey, deleteApiKey } from './lib/supabase.js';
 import AuthModal from './components/AuthModal.jsx';
 
 // LocalStorage keys. Settings.jsx (sibling) uses GEMINI_KEYS_LS too so the
@@ -256,6 +256,8 @@ export default function App() {
   // Multiple Gemini keys: the smart fix rotates through them so every single
   // name gets processed even if one key is rate-limited or down.
   const [apiKeys, setApiKeys] = useState(loadApiKeys);
+  const apiKeysRef = useRef(null);
+  if (apiKeysRef.current === null) apiKeysRef.current = apiKeys;
   const [smartFixOn, setSmartFixOn] = useState(() => {
     try {
       return localStorage.getItem(SMARTFIX_LS) === '1';
@@ -320,6 +322,15 @@ export default function App() {
       if (u && wasOut) {
         // Fresh login: pehle purana shared data apne naam karo, phir reload.
         await adoptOrphanRows();
+        const vaultKeys = await fetchApiKeys();
+        if (Array.isArray(vaultKeys) && vaultKeys.length) {
+          const merged = [...(apiKeysRef.current || [])];
+          vaultKeys.forEach((k) => { if (!merged.includes(k)) merged.push(k); });
+          if (merged.length !== (apiKeysRef.current || []).length) {
+            handleApiKeys(merged);
+            setNotice('Login ho gaya. Aap ki Gemini keys khud load ho gayin hain.');
+          }
+        }
         const rows = await fetchSignatures();
         if (Array.isArray(rows)) setSignatures(rows);
         const hm = sheetMonth && sheetYear ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}` : null;
@@ -359,11 +370,20 @@ export default function App() {
 
   const handleApiKeys = (keys) => {
     const arr = (Array.isArray(keys) ? keys : []).map((k) => String(k || '').trim()).filter(Boolean);
+    const prev = apiKeysRef.current || [];
     setApiKeys(arr);
+    apiKeysRef.current = arr;
     try {
       localStorage.setItem(GEMINI_KEYS_LS, JSON.stringify(arr));
     } catch (e) {
       // ignore
+    }
+    // Vault sync: added keys go up, removed keys come down (fire and forget).
+    if (userRef.current) {
+      const added = arr.filter((k) => !prev.includes(k));
+      const removed = prev.filter((k) => !arr.includes(k));
+      added.forEach((k) => { saveApiKey(k); });
+      removed.forEach((k) => { deleteApiKey(k); });
     }
   };
 

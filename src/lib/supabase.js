@@ -116,6 +116,76 @@ async function currentUserId() {
   }
 }
 
+const KEY_TABLE = 'leave_api_keys';
+
+/**
+ * Load the CURRENT USER's Gemini API keys from the vault.
+ * Returns string[] or null when logged out / on failure.
+ */
+export async function fetchApiKeys() {
+  const sb = getClient();
+  if (!sb) return null;
+  const uid = await currentUserId();
+  if (!uid) return null;
+  try {
+    const { data, error } = await sb
+      .from(KEY_TABLE)
+      .select('key_value')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.warn('[supabase] fetchApiKeys failed:', error.message);
+      return null;
+    }
+    return (data || []).map((r) => r.key_value).filter(Boolean);
+  } catch (e) {
+    console.warn('[supabase] fetchApiKeys exception:', e);
+    return null;
+  }
+}
+
+/** Save one key to the vault (skips duplicates). Returns true on success. */
+export async function saveApiKey(key) {
+  const sb = getClient();
+  if (!sb) return false;
+  const uid = await currentUserId();
+  const k = String(key || '').trim();
+  if (!uid || !k) return false;
+  try {
+    const { data } = await sb.from(KEY_TABLE).select('id').eq('user_id', uid).eq('key_value', k).maybeSingle();
+    if (data) return true;
+    const { error } = await sb.from(KEY_TABLE).insert({ user_id: uid, key_value: k });
+    if (error) {
+      console.warn('[supabase] saveApiKey failed:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[supabase] saveApiKey exception:', e);
+    return false;
+  }
+}
+
+/** Remove one key from the vault. Returns true on success. */
+export async function deleteApiKey(key) {
+  const sb = getClient();
+  if (!sb) return false;
+  const uid = await currentUserId();
+  const k = String(key || '').trim();
+  if (!uid || !k) return false;
+  try {
+    const { error } = await sb.from(KEY_TABLE).delete().eq('user_id', uid).eq('key_value', k);
+    if (error) {
+      console.warn('[supabase] deleteApiKey failed:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[supabase] deleteApiKey exception:', e);
+    return false;
+  }
+}
+
 /**
  * One-time adoption: claim rows saved before accounts existed
  * (user_id IS NULL) for the current user. Runs after login; harmless
@@ -129,6 +199,7 @@ export async function adoptOrphanRows() {
   try {
     await sb.from(SIG_TABLE).update({ user_id: uid }).is('user_id', null);
     await sb.from(HOL_TABLE).update({ user_id: uid }).is('user_id', null);
+    await sb.from(KEY_TABLE).update({ user_id: uid }).is('user_id', null);
   } catch (e) {
     console.warn('[supabase] adoptOrphanRows failed:', e.message);
   }
