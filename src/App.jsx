@@ -149,57 +149,55 @@ async function buildForms(rawRows, mapping, opts) {
   });
 
   // Stats so the UI can tell the user whether Gemini actually ran.
-  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && keys.length) };
+  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && keys.length), keyErrors: [] };
 
   if (smartFixOn && keys.length) {
     const kinds = ['name', 'father', 'designation', 'department', 'reason'];
-    const CHUNK = 4; // ~20 values per Gemini call; small batches survive better
-    const batches = [];
-    for (let i = 0; i < forms.length; i += CHUNK) {
-      const chunk = forms.slice(i, i + CHUNK);
-      const items = [];
-      chunk.forEach((f, ci) => {
-        kinds.forEach((k) => {
-          if ((f[k] || '').trim()) items.push({ ci, k });
-        });
-      });
-      if (items.length) batches.push({ chunk, items });
-    }
-    stats.attempted = batches.reduce((n, b) => n + b.items.length, 0);
-    let done = 0;
-    for (const { chunk, items } of batches) {
-      try {
+    // Collect EVERY value across ALL forms in one list. smartUrduFix
+    // dedups (Ali asked once even if on 10 forms), splits into bunches and
+    // runs all keys IN PARALLEL — then we map answers back to every form.
+    const items = [];
+    forms.forEach((f, fi) => {
+      kinds.forEach((k) => {
         // IMPORTANT: always send Gemini the ORIGINAL ENGLISH text, never the
         // already-transliterated Urdu. Re-running on Gemini's own Urdu output
         // caused drift (e.g. a correct name turning wrong on the second run).
-        // smartUrduFix rotates through ALL keys with retries and batch
-        // splitting internally, so a throw here means every key failed hard.
-        const fixed = await smartUrduFix(
-          items.map((it) => {
-            const eng = (chunk[it.ci].english && chunk[it.ci].english[it.k]) || '';
-            return eng.trim() ? eng : chunk[it.ci][it.k];
-          }),
-          items.map((it) => it.k),
-          keys
-        );
-        if (Array.isArray(fixed) && fixed.length === items.length) {
-          items.forEach((it, idx) => {
-            const v = fixed[idx];
-            if (typeof v === 'string' && v.trim()) {
-              chunk[it.ci][it.k] = v;
-              stats.fixed += 1;
-            }
-          });
-        } else {
-          stats.failed = true;
+        const orig = (f.english && f.english[k]) || '';
+        const text = (orig.trim() ? orig : f[k] || '').trim();
+        if (text) items.push({ fi, k, text });
+      });
+    });
+    stats.attempted = items.length;
+    const applyValues = (values) => {
+      items.forEach((it, idx) => {
+        const v = values[idx];
+        if (typeof v === 'string' && v.trim()) {
+          forms[it.fi][it.k] = v;
+          stats.fixed += 1;
         }
-      } catch (e) {
-        stats.failed = true;
-      }
-      done += items.length;
+      });
+    };
+    try {
+      const fixed = await smartUrduFix(
+        items.map((it) => it.text),
+        items.map((it) => it.k),
+        keys,
+        (done, total) => {
+          if (typeof onProgress === 'function') {
+            try { onProgress(done, total); } catch (e) { /* ignore */ }
+          }
+        }
+      );
+      applyValues(fixed);
       if (typeof onProgress === 'function') {
-        try { onProgress(done, stats.attempted); } catch (e) { /* ignore */ }
+        try { onProgress(items.length, items.length); } catch (e) { /* ignore */ }
       }
+    } catch (e) {
+      // Partial failure still carries the good values — apply them, but
+      // report the miss HONESTLY with the real per-key reasons.
+      if (e && e.partial) applyValues(e.partial);
+      stats.failed = true;
+      stats.keyErrors = (e && e.keyErrors) || [(e && e.message) || 'Unknown error'];
     }
   }
   forms._geminiStats = stats;
@@ -436,9 +434,11 @@ export default function App() {
     const st = built && built._geminiStats;
     if (!st || st.skipped) return;
     if (st.failed) {
+      const reasons = (st.keyErrors || []).slice(0, 3).join(' | ');
       setError(
-        `Gemini se mukammal rabta nahi ho saka (keys ya internet check karein). ` +
-        `${st.fixed}/${st.attempted} values theek huin, baqi par local Urdu lagi hai.`
+        `Gemini se rabta nahi ho saka. ` +
+        `${st.fixed}/${st.attempted} values theek huin, baqi par local Urdu lagi hai.` +
+        (reasons ? ` Wajah: ${reasons}` : '')
       );
     } else if (st.fixed > 0) {
       setNotice(`Gemini ne ${st.fixed} naam/department/reason Urdu me theek kar diye.`);

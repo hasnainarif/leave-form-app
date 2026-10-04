@@ -38,6 +38,8 @@ export default function Settings({
 }) {
   const [keyInput, setKeyInput] = useState('');
   const [keyAdded, setKeyAdded] = useState(false);
+  const [bulkKeys, setBulkKeys] = useState('');
+  const [bulkAdded, setBulkAdded] = useState(false);
   const keyList = Array.isArray(apiKeys) ? apiKeys : [];
   const maskKey = (k) => {
     const s = String(k || '');
@@ -92,6 +94,17 @@ export default function Settings({
   };
   const removeKey = (k) => {
     onApiKeys(keyList.filter((x) => x !== k));
+  };
+  const importBulkKeys = () => {
+    const fresh = bulkKeys
+      .split(/[\s,;]+/)
+      .map((x) => x.trim())
+      .filter((x) => x && !keyList.includes(x));
+    if (!fresh.length) return;
+    onApiKeys([...keyList, ...fresh]);
+    setBulkKeys('');
+    setBulkAdded(true);
+    setTimeout(() => setBulkAdded(false), 2500);
   };
 
   // ---- App PIN lock ----
@@ -253,9 +266,30 @@ export default function Settings({
           </button>
         </div>
         <p style={s.note}>
-          Keys sirf aapke browser me rehti hain, kahin upload nahi hotin. Ek key fail/rate-limit
-          ho to doosri khud try hogi, taake sare naam lazmi process hon.
+          Keys sirf aapke browser me rehti hain, kahin upload nahi hotin. Sari keys
+          ek sath parallel kaam karti hain — data bunches me bat kar har key apna
+          hissa ek sath process karti hai. Ek key fail ho to doosri us ka kaam
+          utha leti hai.
         </p>
+        <details style={{ marginTop: 6 }}>
+          <summary style={{ ...s.note, cursor: 'pointer', fontWeight: 600 }}>
+            Ek sath kai keys paste karni hain? (bulk import)
+          </summary>
+          <textarea
+            style={{ ...s.input, width: '100%', minHeight: 70, marginTop: 6, fontFamily: 'monospace' }}
+            placeholder={'Har line par ek key (AIza...)\nya comma se alag kar ke paste karein'}
+            value={bulkKeys}
+            onChange={(e) => setBulkKeys(e.target.value)}
+            autoComplete="off"
+          />
+          <button
+            style={{ ...s.btn, marginTop: 6 }}
+            onClick={importBulkKeys}
+            disabled={!bulkKeys.trim()}
+          >
+            {bulkAdded ? `Import ho gayin ✓` : 'Sab import karein'}
+          </button>
+        </details>
 
         <label style={s.toggleRow}>
           <input
