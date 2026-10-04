@@ -22,8 +22,19 @@
  *     found) is captured per key and surfaced, instead of a vague message.
  */
 
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+/**
+ * Model: Google purane model naye projects ko nahi deta (404: "no longer
+ * available to new users"), is liye primary naya model hai. Purani keys
+ * (purane projects) ke liye legacy model fallback rakha hai — har key ke
+ * liye jo model chal jaye wo yaad rehta hai, dobara try nahi hota.
+ */
+const GEMINI_MODEL_PRIMARY = 'gemini-3.5-flash-lite';
+const GEMINI_MODEL_LEGACY = 'gemini-2.5-flash-lite';
+const keyModelCache = new Map(); // apiKey -> working model name
+
+function geminiUrl(model) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
 
 const BUNCH_SIZE = 20;
 const MAX_CONSEC_FAILS = 3;
@@ -37,12 +48,12 @@ function chunk(arr, size) {
 /**
  * Low-level JSON-mode call. Throws on any failure with the API's own
  * message when available (invalid key, quota exceeded, model not found…).
+ * Model fallback: 404 "no longer available" par doosra model try hota hai.
  */
-async function geminiJson(prompt, apiKey, maxOutputTokens) {
-  if (!apiKey) throw new Error('Gemini API key is required');
+async function postToGemini(model, prompt, apiKey, maxOutputTokens) {
   let res;
   try {
-    res = await fetch(GEMINI_URL, {
+    res = await fetch(geminiUrl(model), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,6 +65,8 @@ async function geminiJson(prompt, apiKey, maxOutputTokens) {
           maxOutputTokens,
           temperature: 0,
           responseMimeType: 'application/json',
+          // 3.x models ki thinking tokens se bachao: seedha jawab chahiye.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
@@ -83,6 +96,30 @@ async function geminiJson(prompt, apiKey, maxOutputTokens) {
   } catch {
     throw new Error('Gemini ka jawab samajh nahi aaya (invalid JSON)');
   }
+}
+
+async function geminiJson(prompt, apiKey, maxOutputTokens) {
+  if (!apiKey) throw new Error('Gemini API key is required');
+  const cached = keyModelCache.get(apiKey);
+  const models = cached
+    ? [cached]
+    : [GEMINI_MODEL_PRIMARY, GEMINI_MODEL_LEGACY].filter((m, i, a) => m && a.indexOf(m) === i);
+  let lastErr = null;
+  for (const model of models) {
+    try {
+      const out = await postToGemini(model, prompt, apiKey, maxOutputTokens);
+      keyModelCache.set(apiKey, model);
+      return out;
+    } catch (e) {
+      lastErr = e;
+      const msg = e.message || '';
+      // Sirf "ye model is key par available nahi" wali 404 par doosra
+      // model try karo. Quota/invalid-key waghera par foran ruk jao.
+      const modelGone = /^Gemini API error 404/.test(msg) && /no longer available|not found|could not find/i.test(msg);
+      if (!modelGone) throw e;
+    }
+  }
+  throw lastErr;
 }
 
 /**

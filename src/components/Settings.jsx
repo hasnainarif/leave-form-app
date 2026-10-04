@@ -346,8 +346,8 @@ export default function Settings({
           <span style={s.toggleText}>Smart Urdu fix</span>
         </label>
         <p style={s.note}>
-          Smart Urdu fix aapki key ke sath gemini-2.5-flash-lite use karta hai. Cheapest model,
-          minimal tokens.
+          Smart Urdu fix aapki key ke sath gemini-3.5-flash-lite use karta hai (purani keys
+          par khud hi purana model lag jata hai). Cheapest model, minimal tokens.
         </p>
       </section>
 
