@@ -1,8 +1,8 @@
 // src/components/Settings.jsx
-// App settings: Gemini API key, Smart Urdu fix toggle, public holidays per month.
-// Props: { apiKey, onApiKey, smartFixOn, onSmartFix, holidays, onHolidays }
-//   apiKey: current Gemini key string
-//   onApiKey: (key) => void
+// App settings: Gemini API keys (multiple), Smart Urdu fix toggle, public holidays per month.
+// Props: { apiKeys, onApiKeys, smartFixOn, onSmartFix, holidays, onHolidays }
+//   apiKeys: string[] of Gemini keys (tried in rotation)
+//   onApiKeys: (keys) => void
 //   smartFixOn: boolean, onSmartFix: (bool) => void
 //   holidays: string[] (the currently active holiday list, session scope)
 //   onHolidays: (list) => void
@@ -10,8 +10,6 @@
 import { useEffect, useState } from 'react';
 import { fetchKarachiHolidays } from '../lib/gemini.js';
 import { isConfigured, fetchHolidays, saveHolidays } from '../lib/supabase.js';
-
-const LS_KEY = 'crown-leave-gemini-key';
 
 // Normalize whatever the sibling's fetchKarachiHolidays returns into YYYY-MM-DD strings.
 function normalizeDates(raw) {
@@ -27,8 +25,8 @@ function normalizeDates(raw) {
 }
 
 export default function Settings({
-  apiKey = '',
-  onApiKey = () => {},
+  apiKeys = [],
+  onApiKeys = () => {},
   smartFixOn = false,
   onSmartFix = () => {},
   holidays = [],
@@ -37,8 +35,13 @@ export default function Settings({
   sheetYear,
   onMonthYear = () => {},
 }) {
-  const [keyInput, setKeyInput] = useState(apiKey || '');
-  const [keySaved, setKeySaved] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
+  const [keyAdded, setKeyAdded] = useState(false);
+  const keyList = Array.isArray(apiKeys) ? apiKeys : [];
+  const maskKey = (k) => {
+    const s = String(k || '');
+    return s.length > 10 ? `${s.slice(0, 4)}...${s.slice(-4)}` : '****';
+  };
   // The holiday month follows the register's month picked on the Upload step
   // (single source of truth in App) — no more setting it twice.
   const month = `${sheetYear}-${String(sheetMonth).padStart(2, '0')}`;
@@ -55,20 +58,6 @@ export default function Settings({
   const [dbSource, setDbSource] = useState('');
   const [dbBusy, setDbBusy] = useState(false);
   const [error, setError] = useState('');
-
-  // Mount: restore saved key from localStorage.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(LS_KEY) || '';
-      if (stored) {
-        setKeyInput(stored);
-        if (stored !== apiKey) onApiKey(stored);
-      }
-    } catch (e) {
-      console.warn('[settings] localStorage read failed:', e);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Month change: pull confirmed holidays from DB when configured.
   useEffect(() => {
@@ -92,25 +81,24 @@ export default function Settings({
     };
   }, [month]);
 
-  const saveKey = () => {
+  const addKey = () => {
     const k = keyInput.trim();
-    try {
-      if (k) localStorage.setItem(LS_KEY, k);
-      else localStorage.removeItem(LS_KEY);
-    } catch (e) {
-      console.warn('[settings] localStorage write failed:', e);
-    }
-    onApiKey(k);
-    setKeySaved(true);
-    setTimeout(() => setKeySaved(false), 2000);
+    if (!k) return;
+    if (!keyList.includes(k)) onApiKeys([...keyList, k]);
+    setKeyInput('');
+    setKeyAdded(true);
+    setTimeout(() => setKeyAdded(false), 2000);
+  };
+  const removeKey = (k) => {
+    onApiKeys(keyList.filter((x) => x !== k));
   };
 
   const loadFromGemini = async () => {
-    if (!apiKey || geminiBusy) return;
+    if (!keyList.length || geminiBusy) return;
     setGeminiBusy(true);
     setError('');
     try {
-      const dates = await fetchKarachiHolidays(month, apiKey);
+      const dates = await fetchKarachiHolidays(month, keyList);
       const list = normalizeDates(dates);
       if (list.length === 0) {
         setError('Gemini se koi holiday nahi mili. Manual add kar lein.');
@@ -161,23 +149,35 @@ export default function Settings({
 
   return (
     <div style={s.wrap}>
-      {/* Gemini API key */}
+      {/* Gemini API keys (multiple) */}
       <section style={s.section}>
-        <h3 style={s.h3}>Gemini API key</h3>
-        <div style={s.row}>
+        <h3 style={s.h3}>Gemini API keys</h3>
+        {keyList.map((k) => (
+          <div key={k} style={{ ...s.row, marginTop: 6 }}>
+            <span style={{ ...s.input, flex: 1, fontFamily: 'monospace' }}>🔑 {maskKey(k)}</span>
+            <button style={{ ...s.btn, ...s.ghostBtn }} onClick={() => removeKey(k)}>
+              Hatayein
+            </button>
+          </div>
+        ))}
+        <div style={{ ...s.row, marginTop: keyList.length ? 6 : 0 }}>
           <input
             type="password"
             style={{ ...s.input, flex: 1 }}
-            placeholder="AIza..."
+            placeholder="Nayi key paste karein (AIza...)"
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addKey(); }}
             autoComplete="off"
           />
-          <button style={s.btn} onClick={saveKey}>
-            {keySaved ? 'Saved' : 'Save'}
+          <button style={s.btn} onClick={addKey} disabled={!keyInput.trim()}>
+            {keyAdded ? 'Added ✓' : 'Add karein'}
           </button>
         </div>
-        <p style={s.note}>Key sirf aapke browser me rehti hai, kahin upload nahi hoti.</p>
+        <p style={s.note}>
+          Keys sirf aapke browser me rehti hain, kahin upload nahi hotin. Ek key fail/rate-limit
+          ho to doosri khud try hogi, taake sare naam lazmi process hon.
+        </p>
 
         <label style={s.toggleRow}>
           <input
@@ -207,9 +207,9 @@ export default function Settings({
 
         <div style={s.btnRow}>
           <button
-            style={{ ...s.btn, flex: '1 1 200px', opacity: apiKey ? 1 : 0.5 }}
+            style={{ ...s.btn, flex: '1 1 200px', opacity: keyList.length ? 1 : 0.5 }}
             onClick={loadFromGemini}
-            disabled={!apiKey || geminiBusy}
+            disabled={!keyList.length || geminiBusy}
           >
             {geminiBusy ? 'La rahe hain...' : 'Gemini se Karachi holidays lao'}
           </button>
@@ -218,7 +218,7 @@ export default function Settings({
           </button>
         </div>
 
-        {!apiKey && (
+        {!keyList.length && (
           <p style={s.note}>
             API key ke baghair manual mode hai. Sundays automatically off hote hain, baqi holidays
             yahan add kar lein.

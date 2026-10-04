@@ -9,10 +9,31 @@ import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
 import { isConfigured } from './lib/supabase.js';
 
-// LocalStorage keys. Settings.jsx (sibling) should use GEMINI_KEY_LS too so the
-// key field and App state never disagree. App writes it on every change anyway.
-const GEMINI_KEY_LS = 'crown-leave-gemini-key';
+// LocalStorage keys. Settings.jsx (sibling) uses GEMINI_KEYS_LS too so the
+// key list and App state never disagree. App writes it on every change anyway.
+const GEMINI_KEYS_LS = 'crown-leave-gemini-keys';
+const GEMINI_KEY_LS_OLD = 'crown-leave-gemini-key'; // legacy single key, migrated once
 const SMARTFIX_LS = 'crown-leave-smartfix';
+
+// Read saved keys; migrate the old single-key format on first run.
+function loadApiKeys() {
+  try {
+    const raw = localStorage.getItem(GEMINI_KEYS_LS);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.map((k) => String(k || '').trim()).filter(Boolean);
+    }
+    const old = localStorage.getItem(GEMINI_KEY_LS_OLD);
+    if (old && old.trim()) {
+      const arr = [old.trim()];
+      try { localStorage.setItem(GEMINI_KEYS_LS, JSON.stringify(arr)); } catch (e) { /* ignore */ }
+      return arr;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+}
 
 const FIELDS = ['ecode', 'name', 'father', 'designation', 'department', 'date', 'reason'];
 const STEPS = ['Upload', 'Review rows', 'Signatures', 'Generate'];
@@ -97,10 +118,12 @@ function useDefaultHrSignUrl() {
 
 // Transliterate every raw row, then optionally run Gemini smart-fix in batches.
 // Any smart-fix failure falls back silently to the local transliteration.
-// opts: { apiKey, smartFixOn, month, year } — month/year apply to bare
-// day-number dates in the sheet (the register's month).
+// opts: { apiKeys, smartFixOn, month, year, onProgress } — month/year apply to
+// bare day-number dates in the sheet (the register's month).
+// onProgress(done, total) is called as Gemini values complete.
 async function buildForms(rawRows, mapping, opts) {
-  const { apiKey, smartFixOn, month, year } = opts || {};
+  const { apiKeys, smartFixOn, month, year, onProgress } = opts || {};
+  const keys = (Array.isArray(apiKeys) ? apiKeys : []).filter(Boolean);
   const forms = rawRows.map((row) => {
     let t = {};
     try {
@@ -123,11 +146,12 @@ async function buildForms(rawRows, mapping, opts) {
   });
 
   // Stats so the UI can tell the user whether Gemini actually ran.
-  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && apiKey) };
+  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && keys.length) };
 
-  if (smartFixOn && apiKey) {
+  if (smartFixOn && keys.length) {
     const kinds = ['name', 'father', 'designation', 'department', 'reason'];
-    const CHUNK = 8;
+    const CHUNK = 4; // ~20 values per Gemini call; small batches survive better
+    const batches = [];
     for (let i = 0; i < forms.length; i += CHUNK) {
       const chunk = forms.slice(i, i + CHUNK);
       const items = [];
@@ -136,19 +160,24 @@ async function buildForms(rawRows, mapping, opts) {
           if ((f[k] || '').trim()) items.push({ ci, k });
         });
       });
-      if (!items.length) continue;
-      stats.attempted += items.length;
+      if (items.length) batches.push({ chunk, items });
+    }
+    stats.attempted = batches.reduce((n, b) => n + b.items.length, 0);
+    let done = 0;
+    for (const { chunk, items } of batches) {
       try {
         // IMPORTANT: always send Gemini the ORIGINAL ENGLISH text, never the
         // already-transliterated Urdu. Re-running on Gemini's own Urdu output
         // caused drift (e.g. a correct name turning wrong on the second run).
+        // smartUrduFix rotates through ALL keys with retries and batch
+        // splitting internally, so a throw here means every key failed hard.
         const fixed = await smartUrduFix(
           items.map((it) => {
             const eng = (chunk[it.ci].english && chunk[it.ci].english[it.k]) || '';
             return eng.trim() ? eng : chunk[it.ci][it.k];
           }),
           items.map((it) => it.k),
-          apiKey
+          keys
         );
         if (Array.isArray(fixed) && fixed.length === items.length) {
           items.forEach((it, idx) => {
@@ -158,10 +187,15 @@ async function buildForms(rawRows, mapping, opts) {
               stats.fixed += 1;
             }
           });
+        } else {
+          stats.failed = true;
         }
       } catch (e) {
-        // mark the failure visibly instead of failing silently
         stats.failed = true;
+      }
+      done += items.length;
+      if (typeof onProgress === 'function') {
+        try { onProgress(done, stats.attempted); } catch (e) { /* ignore */ }
       }
     }
   }
@@ -218,13 +252,9 @@ export default function App() {
   const [step, setStep] = useState(0);
 
   // Settings live here at the top level and are NEVER wiped by a new upload.
-  const [apiKey, setApiKey] = useState(() => {
-    try {
-      return localStorage.getItem(GEMINI_KEY_LS) || '';
-    } catch (e) {
-      return '';
-    }
-  });
+  // Multiple Gemini keys: the smart fix rotates through them so every single
+  // name gets processed even if one key is rate-limited or down.
+  const [apiKeys, setApiKeys] = useState(loadApiKeys);
   const [smartFixOn, setSmartFixOn] = useState(() => {
     try {
       return localStorage.getItem(SMARTFIX_LS) === '1';
@@ -275,10 +305,11 @@ export default function App() {
     }
   });
 
-  const handleApiKey = (k) => {
-    setApiKey(k || '');
+  const handleApiKeys = (keys) => {
+    const arr = (Array.isArray(keys) ? keys : []).map((k) => String(k || '').trim()).filter(Boolean);
+    setApiKeys(arr);
     try {
-      localStorage.setItem(GEMINI_KEY_LS, k || '');
+      localStorage.setItem(GEMINI_KEYS_LS, JSON.stringify(arr));
     } catch (e) {
       // ignore
     }
@@ -302,10 +333,11 @@ export default function App() {
     setBusyMsg('File parh li. Urdu tayyar ki ja rahi hai...');
     try {
       const built = await buildForms(rows, useMapping, {
-        apiKey,
+        apiKeys,
         smartFixOn,
         month: sheetMonth,
         year: sheetYear,
+        onProgress: (d, t) => setBusyMsg(`Gemini se Urdu theek ho rahi hai... ${d}/${t}`),
       });
       setHeaders(headers);
       setMapping(useMapping);
@@ -329,7 +361,7 @@ export default function App() {
     try {
       const rawRows = forms.map((f) => f._raw).filter(Boolean);
       const rebuilt = await buildForms(rawRows, newMapping, {
-        apiKey: '',
+        apiKeys: [],
         smartFixOn: false,
         month: sheetMonth,
         year: sheetYear,
@@ -343,13 +375,17 @@ export default function App() {
 
   // Tell the user plainly whether Gemini actually ran and fixed values,
   // so a silent fallback is never mistaken for a successful correction.
+  // With key rotation + retries + batch splitting inside, a failure means
+  // Gemini was truly unreachable — reported as an error, never a soft
+  // "some remained" note.
   const reportGeminiStats = (built) => {
     const st = built && built._geminiStats;
     if (!st || st.skipped) return;
-    if (st.failed && st.fixed === 0) {
-      setError('Gemini se rabta nahi ho saka (API key ya internet check karein). Local Urdu wali values rakhi hain.');
-    } else if (st.failed) {
-      setNotice(`Gemini ne ${st.fixed} values theek kin, lekin kuch reh gayin. Dobara koshish kar sakte hain.`);
+    if (st.failed) {
+      setError(
+        `Gemini se mukammal rabta nahi ho saka (keys ya internet check karein). ` +
+        `${st.fixed}/${st.attempted} values theek huin, baqi par local Urdu lagi hai.`
+      );
     } else if (st.fixed > 0) {
       setNotice(`Gemini ne ${st.fixed} naam/department/reason Urdu me theek kar diye.`);
     }
@@ -368,10 +404,11 @@ export default function App() {
     handleSmartFix(true);
     try {
       const rebuilt = await buildForms(rawRows, mapping || {}, {
-        apiKey,
+        apiKeys,
         smartFixOn: true,
         month: sheetMonth,
         year: sheetYear,
+        onProgress: (d, t) => setBusyMsg(`Gemini se Urdu theek ho rahi hai... ${d}/${t}`),
       });
       setForms(rebuilt);
       reportGeminiStats(rebuilt);
@@ -523,8 +560,8 @@ export default function App() {
             onRowsChange={setForms}
             onBack={() => setStep(0)}
             onContinue={() => setStep(2)}
-            apiKey={apiKey}
-            onApiKey={handleApiKey}
+            apiKeys={apiKeys}
+            onApiKeys={handleApiKeys}
             smartFixOn={smartFixOn}
             onSmartFix={handleSmartFix}
             onRerunSmartFix={rerunSmartFix}
@@ -540,8 +577,8 @@ export default function App() {
               defaultHrSignUrl={defaultHrSignUrl}
             />
             <Settings
-              apiKey={apiKey}
-              onApiKey={handleApiKey}
+              apiKeys={apiKeys}
+              onApiKeys={handleApiKeys}
               smartFixOn={smartFixOn}
               onSmartFix={handleSmartFix}
               holidays={holidays}

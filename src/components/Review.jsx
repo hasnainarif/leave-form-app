@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const FIELD_LABELS = [
   ['ecode', 'Ecode'],
   ['name', 'Name'],
@@ -21,8 +23,8 @@ export default function Review({
   onRowsChange,
   onBack,
   onContinue,
-  apiKey,
-  onApiKey,
+  apiKeys,
+  onApiKeys,
   smartFixOn,
   onSmartFix,
   onRerunSmartFix,
@@ -36,6 +38,23 @@ export default function Review({
     onRowsChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   const dropRow = (id) => onRowsChange(rows.filter((r) => r.id !== id));
+
+  // Multi-key add/remove (keys live only in this browser).
+  const [newKey, setNewKey] = useState('');
+  const keyList = Array.isArray(apiKeys) ? apiKeys : [];
+  const maskKey = (k) => {
+    const s = String(k || '');
+    return s.length > 10 ? `${s.slice(0, 4)}...${s.slice(-4)}` : '****';
+  };
+  const addKey = () => {
+    const k = newKey.trim();
+    if (!k) return;
+    if (!keyList.includes(k)) onApiKeys && onApiKeys([...keyList, k]);
+    setNewKey('');
+  };
+  const removeKey = (k) => {
+    onApiKeys && onApiKeys(keyList.filter((x) => x !== k));
+  };
 
   const canContinue =
     !!mapping && REQUIRED.every((f) => mapping[f]) && rows.length > 0;
@@ -51,14 +70,49 @@ export default function Review({
           Pehle apni Gemini API key dein (sirf is browser me mehfooz rehti hai).
         </p>
         <div className="mt-3 flex flex-col gap-3">
-          <input
-            type="password"
-            value={apiKey || ''}
-            onChange={(e) => onApiKey && onApiKey(e.target.value)}
-            placeholder="Gemini API key yahan paste karein"
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
-            autoComplete="off"
-          />
+          {/* Saved keys */}
+          {keyList.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {keyList.map((k) => (
+                <div
+                  key={k}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <span className="font-mono">🔑 {maskKey(k)}</span>
+                  <button
+                    onClick={() => removeKey(k)}
+                    className="shrink-0 text-xs font-semibold text-red-600 underline dark:text-red-400"
+                  >
+                    Hatayein
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add a new key */}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addKey(); }}
+              placeholder="Nayi Gemini API key yahan paste karein"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
+              autoComplete="off"
+            />
+            <button
+              onClick={addKey}
+              disabled={!newKey.trim()}
+              className="shrink-0 rounded-lg bg-slate-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Key add karein
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {keyList.length === 0
+              ? 'Key ke baghair button nahi chalega. Key AI Studio se free me milti hai.'
+              : `${keyList.length} key${keyList.length > 1 ? 's' : ''} mehfooz hain. Ek fail ho to doosri khud try hogi, taake sare naam lazmi process hon.`}
+          </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
               <input
@@ -71,15 +125,15 @@ export default function Review({
             </label>
             <button
               onClick={onRerunSmartFix}
-              disabled={busy || !apiKey}
+              disabled={busy || !keyList.length}
               className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Gemini kaam kar raha hai...' : 'Gemini se Urdu theek karwain'}
             </button>
           </div>
-          {!apiKey && (
+          {!keyList.length && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Key ke baghair button nahi chalega. Key AI Studio se free me milti hai.
+              Pehle upar se kam az kam ek key add karein.
             </p>
           )}
         </div>

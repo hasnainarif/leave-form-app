@@ -135,7 +135,7 @@ export function formStyles() {
   body { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif; }
   @page { size: A4 landscape; margin: 8mm; }
   .clf-page {
-    display: flex; gap: 6mm; direction: rtl;
+    display: flex; gap: 3mm; direction: rtl;
     page-break-after: always; break-after: page;
     height: 192mm;
   }
