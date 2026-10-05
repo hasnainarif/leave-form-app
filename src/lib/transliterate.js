@@ -261,6 +261,7 @@ export const DESIG_DICT = {
   'OPT': 'مشین آپریٹر',
   'OVERLOCK OPT': 'مشین آپریٹر',
   'SHAPER': 'شیپر',
+  'KNITTING': 'نٹنگ',
 };
 
 /** Common Pakistani person-name components with correct Urdu spellings.
