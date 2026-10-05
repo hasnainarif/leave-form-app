@@ -59,6 +59,10 @@ const en = {
     dropPhone: 'Works from your phone too.',
     month: 'Which month is this register for?',
     monthNote: 'If the Date column has only day numbers (like 18, 19, 20), they are read as this month.',
+    leaveType: 'Which leave is this?',
+    leaveTypeSick: 'Sick leave',
+    leaveTypeCasual: 'Casual leave',
+    leaveTypeAnnual: 'Annual leave',
     needCols: 'The file should have these columns:',
     colsNote:
       'Ecode, Name, Father, Designation, Department, Date, Reason. If names differ slightly the app tries to detect them, and you can fix the mapping in the next step.',
@@ -280,6 +284,10 @@ const ur = {
     dropPhone: 'Phone se bhi file select ho jayegi.',
     month: 'Ye register kis month ka hai?',
     monthNote: 'Date column me sirf din likha ho (jaise 18, 19, 20) to usi month ka samjha jayega.',
+    leaveType: 'Ye kaunsi leave hai?',
+    leaveTypeSick: 'Sick leave',
+    leaveTypeCasual: 'Casual leave',
+    leaveTypeAnnual: 'Annual leave',
     needCols: 'File mein ye columns hone chahiye:',
     colsNote:
       'Ecode, Name, Father, Designation, Department, Date, Reason. Naam thore mukhtalif bhi hon to app khud pehchanne ki koshish karegi, aur agle step mein aap mapping khud theek kar sakte hain.',

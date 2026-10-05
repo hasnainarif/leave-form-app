@@ -145,6 +145,7 @@ async function buildForms(rawRows, mapping, opts) {
       department: t.department || '',
       date: t.date || '',
       reason: t.reason || '',
+      leaveType: opts.leaveType || 'sick',
       english: englishFromRow(row, mapping),
       _raw: row,
     };
@@ -297,6 +298,7 @@ export default function App() {
 
   const [sheetMonth, setSheetMonth] = useState(() => new Date().getMonth() + 1);
   const [sheetYear, setSheetYear] = useState(() => new Date().getFullYear());
+  const [leaveType, setLeaveType] = useState('sick');
 
   const [dark, setDark] = useState(() => {
     try {
@@ -440,6 +442,7 @@ export default function App() {
         smartFixOn,
         month: sheetMonth,
         year: sheetYear,
+        leaveType,
         onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
       setHeaders(headers);
@@ -466,6 +469,7 @@ export default function App() {
         smartFixOn: false,
         month: sheetMonth,
         year: sheetYear,
+        leaveType: (forms[0] && forms[0].leaveType) || leaveType,
       });
       setForms(rebuilt);
     } finally {
@@ -498,6 +502,7 @@ export default function App() {
         smartFixOn: true,
         month: sheetMonth,
         year: sheetYear,
+        leaveType: (forms[0] && forms[0].leaveType) || leaveType,
         onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
       setForms(rebuilt);
@@ -745,6 +750,8 @@ export default function App() {
                     setSheetMonth(m);
                     setSheetYear(y);
                   }}
+                  leaveType={leaveType}
+                  onLeaveType={setLeaveType}
                 />
               )}
               {step === 1 && (

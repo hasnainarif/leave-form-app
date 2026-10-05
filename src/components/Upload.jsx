@@ -9,7 +9,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear }) {
+export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear, leaveType = 'sick', onLeaveType }) {
   const t = (k, ...a) => tr(lang, k, ...a);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,6 +62,33 @@ export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear
           <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
             {t('upload.sub')}
           </p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {t('upload.leaveType')}
+        </p>
+        <div className="mt-2 flex gap-2">
+          {[
+            ['sick', t('upload.leaveTypeSick')],
+            ['casual', t('upload.leaveTypeCasual')],
+            ['annual', t('upload.leaveTypeAnnual')],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onLeaveType && onLeaveType(id)}
+              className={
+                'min-h-[44px] flex-1 rounded-lg border px-3 text-sm font-semibold transition ' +
+                (leaveType === id
+                  ? 'border-emerald-600 bg-emerald-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200')
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -20,7 +20,7 @@ function toFormData(f) {
     leaveDateStr,
     quantity: '1',
     reason: f.reason || '',
-    leaveType: 'sick',
+    leaveType: f.leaveType || 'sick',
   };
 }
 
