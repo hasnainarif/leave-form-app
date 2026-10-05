@@ -123,7 +123,7 @@ const COL_SPECS = [
   ['father', ['fathername', 'father', 'husband', 'guardian', 'sonof', 'fname']],
   ['designation', ['designation', 'des', 'post', 'occupation', 'title']],
   ['department', ['deptname', 'departmentname', 'department', 'dept', 'section']],
-  ['date', ['leavedate', 'sickdate', 'sickday', 'date', 'day', 'dt']],
+  ['date', ['leavedate', 'sickdate', 'sickday', 'sick', 'date', 'day', 'dt']],
   ['reason', ['reason', 'remarks', 'purpose', 'waja']],
 ];
 
