@@ -4,13 +4,31 @@ import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
 import PinLock from './components/PinLock.jsx';
 import { hasPin } from './lib/pin.js';
-import { transliterateRow } from './lib/transliterate.js';
+import { transliterateRow, buildCustomDict } from './lib/transliterate.js';
+import { URDU_FONT_DATA_URI } from './lib/urduFont.js';
+
+// Make the proper Urdu (Nastaliq) font available to the whole app shell,
+// so on-screen Urdu text uses the same font as the printed forms.
+try {
+  if (!document.querySelector('style[data-urdu-font]')) {
+    const el = document.createElement('style');
+    el.setAttribute('data-urdu-font', '');
+    el.textContent =
+      "@font-face{font-family:'Noto Nastaliq Urdu';src:url(" +
+      URDU_FONT_DATA_URI +
+      ") format('woff2');font-weight:400 700;font-display:swap;}";
+    document.head.appendChild(el);
+  }
+} catch (e) {
+  /* ignore */
+}
 import { smartUrduFix } from './lib/gemini.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
-import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays, fetchApiKeys, saveApiKey, deleteApiKey } from './lib/supabase.js';
+import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays, fetchApiKeys, saveApiKey, deleteApiKey, fetchDictionary } from './lib/supabase.js';
 import AuthScreen from './components/AuthScreen.jsx';
 import ApiKeysView from './components/ApiKeysView.jsx';
 import SignaturesView from './components/SignaturesView.jsx';
+import DictionaryView from './components/DictionaryView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import { tr } from './lib/strings.js';
 
@@ -128,12 +146,12 @@ function useDefaultHrSignUrl() {
 // bare day-number dates in the sheet (the register's month).
 // onProgress(done, total) is called as Gemini values complete.
 async function buildForms(rawRows, mapping, opts) {
-  const { apiKeys, smartFixOn, month, year, onProgress } = opts || {};
+  const { apiKeys, smartFixOn, month, year, onProgress, customDict, leaveType } = opts || {};
   const keys = (Array.isArray(apiKeys) ? apiKeys : []).filter(Boolean);
   const forms = rawRows.map((row) => {
     let t = {};
     try {
-      t = transliterateRow(row, mapping, { month, year }) || {};
+      t = transliterateRow(row, mapping, { month, year, customDict }) || {};
     } catch (e) {
       t = {};
     }
@@ -295,6 +313,8 @@ export default function App() {
   });
   const [signatures, setSignatures] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [customDictRows, setCustomDictRows] = useState([]);
+  const customDict = useMemo(() => buildCustomDict(customDictRows), [customDictRows]);
   const defaultHrSignUrl = useDefaultHrSignUrl();
   // The bundled HR signature prints on every form unless the user removes it.
   // Removing it is a deliberate choice, so it is remembered (and the default
@@ -365,6 +385,8 @@ export default function App() {
       }
       const rows = await fetchSignatures();
       if (alive && Array.isArray(rows)) setSignatures(rows);
+      const dictRows = await fetchDictionary();
+      if (alive && Array.isArray(dictRows)) setCustomDictRows(dictRows);
       const hm =
         sheetMonth && sheetYear
           ? `${sheetYear}-${String(sheetMonth).padStart(2, '0')}`
@@ -461,6 +483,7 @@ export default function App() {
         smartFixOn,
         month: sheetMonth,
         year: sheetYear,
+        customDict,
         leaveType,
         onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
@@ -488,6 +511,7 @@ export default function App() {
         smartFixOn: false,
         month: sheetMonth,
         year: sheetYear,
+        customDict,
         leaveType: (forms[0] && forms[0].leaveType) || leaveType,
       });
       setForms(rebuilt);
@@ -521,6 +545,7 @@ export default function App() {
         smartFixOn: true,
         month: sheetMonth,
         year: sheetYear,
+        customDict,
         leaveType: (forms[0] && forms[0].leaveType) || leaveType,
         onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
       });
@@ -592,6 +617,7 @@ export default function App() {
     { id: 'forms', label: t('nav.forms'), icon: '📋' },
     { id: 'keys', label: t('nav.keys'), icon: '🔑' },
     { id: 'signs', label: t('nav.signs'), icon: '✍️' },
+    { id: 'dict', label: t('nav.dict'), icon: '📖' },
     { id: 'settings', label: t('nav.settings'), icon: '⚙️' },
   ];
   const FORM_STEPS = [t('steps.upload'), t('steps.review'), t('steps.generate')];
@@ -826,6 +852,14 @@ export default function App() {
               hrDefaultOff={hrDefaultOff}
               onRemoveDefaultHr={() => setHrDefaultOffPersist(true)}
               onRestoreDefaultHr={() => setHrDefaultOffPersist(false)}
+            />
+          )}
+
+          {view === 'dict' && (
+            <DictionaryView
+              lang={lang}
+              customRows={customDictRows}
+              onCustomChange={setCustomDictRows}
             />
           )}
 

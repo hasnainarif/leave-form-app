@@ -652,7 +652,7 @@ function phonetic(text) {
  * kind: 'name' | 'father' | 'designation' | 'department' | 'reason'.
  * Empty input -> ''. Department input that is empty -> '' (no defaults).
  */
-export function transliterate(text, kind) {
+export function transliterate(text, kind, customDict) {
   if (text === null || text === undefined) return '';
   const cleaned = String(text)
     .replace(/[\\/:;]+/g, ' ')
@@ -661,6 +661,12 @@ export function transliterate(text, kind) {
   if (!cleaned) return '';
 
   const key = cleanKey(cleaned);
+
+  // The user's own dictionary always wins over the built-in one.
+  if (customDict && kind && customDict[kind] && customDict[kind][key]) {
+    return customDict[kind][key];
+  }
+
   const dict =
     kind === 'department' ? DEPT_DICT
     : kind === 'designation' ? DESIG_DICT
@@ -673,8 +679,14 @@ export function transliterate(text, kind) {
   // Department values often carry a unit number, e.g. 'STITCHING 04'.
   if (kind === 'department') {
     const m = key.match(/^(.+?)[\s\-]*(\d+)$/);
-    if (m && DEPT_DICT[m[1].trim()]) {
-      return `${DEPT_DICT[m[1].trim()]} ${m[2]}`;
+    if (m) {
+      const base = m[1].trim();
+      if (customDict && customDict.department && customDict.department[base]) {
+        return `${customDict.department[base]} ${m[2]}`;
+      }
+      if (DEPT_DICT[base]) {
+        return `${DEPT_DICT[base]} ${m[2]}`;
+      }
     }
   }
 
@@ -701,13 +713,31 @@ export function transliterate(text, kind) {
 export function transliterateRow(row, mapping, opts = {}) {
   const get = (field) =>
     mapping && mapping[field] != null ? row[mapping[field]] : '';
+  const custom = opts.customDict || null;
   return {
     ecode: String(get('ecode') ?? '').trim(),
-    name: transliterate(get('name'), 'name'),
-    father: transliterate(get('father'), 'father'),
-    designation: transliterate(get('designation'), 'designation'),
-    department: transliterate(get('department'), 'department'),
+    name: transliterate(get('name'), 'name', custom),
+    father: transliterate(get('father'), 'father', custom),
+    designation: transliterate(get('designation'), 'designation', custom),
+    department: transliterate(get('department'), 'department', custom),
     date: normalizeDate(get('date'), opts.month, opts.year) || '',
-    reason: transliterate(get('reason'), 'reason'),
+    reason: transliterate(get('reason'), 'reason', custom),
   };
+}
+
+/**
+ * Build the custom-dict lookup shape from fetchDictionary() rows:
+ * { designation: {EN: urdu}, department: {...}, name: {...}, father: {...}, reason: {...} }
+ * 'father' shares the name entries.
+ */
+export function buildCustomDict(rows) {
+  const out = { designation: {}, department: {}, name: {}, father: {}, reason: {} };
+  for (const r of rows || []) {
+    const cat = r && out[r.category] ? r.category : null;
+    if (!cat) continue;
+    const key = String(r.english || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    if (key && r.urdu) out[cat][key] = String(r.urdu);
+  }
+  out.father = out.name;
+  return out;
 }

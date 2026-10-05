@@ -441,3 +441,103 @@ export async function saveHolidays(month, holidays, source) {
     return false;
   }
 }
+
+const DICT_TABLE = 'leave_dictionary';
+
+/** Custom dictionary categories. */
+export const DICT_CATEGORIES = ['designation', 'department', 'name', 'reason'];
+
+/**
+ * Load the CURRENT USER's custom dictionary entries.
+ * Returns [{ id, english, urdu, category }] or null when logged out / on failure.
+ */
+export async function fetchDictionary() {
+  const sb = getClient();
+  if (!sb) return null;
+  const uid = await currentUserId();
+  if (!uid) return null;
+  try {
+    const { data, error } = await sb
+      .from(DICT_TABLE)
+      .select('id, english, urdu, category')
+      .eq('user_id', uid)
+      .order('category', { ascending: true })
+      .order('english', { ascending: true });
+    if (error) {
+      console.warn('[supabase] fetchDictionary failed:', error.message);
+      return null;
+    }
+    return (data || []).filter((r) => r && r.english && r.urdu);
+  } catch (e) {
+    console.warn('[supabase] fetchDictionary exception:', e);
+    return null;
+  }
+}
+
+/**
+ * Save one custom dictionary entry (updates when the same english+category
+ * already exists for this user). Returns the saved row, or null on failure.
+ */
+export async function saveDictionaryEntry({ english, urdu, category }) {
+  const sb = getClient();
+  if (!sb) return null;
+  const uid = await currentUserId();
+  const en = String(english || '').trim();
+  const ur = String(urdu || '').trim();
+  const cat = DICT_CATEGORIES.includes(category) ? category : 'designation';
+  if (!uid || !en || !ur) return null;
+  try {
+    const { data: existing } = await sb
+      .from(DICT_TABLE)
+      .select('id')
+      .eq('user_id', uid)
+      .eq('category', cat)
+      .ilike('english', en)
+      .maybeSingle();
+    if (existing) {
+      const { data, error } = await sb
+        .from(DICT_TABLE)
+        .update({ english: en, urdu: ur })
+        .eq('id', existing.id)
+        .select('id, english, urdu, category')
+        .single();
+      if (error) {
+        console.warn('[supabase] saveDictionaryEntry update failed:', error.message);
+        return null;
+      }
+      return data;
+    }
+    const { data, error } = await sb
+      .from(DICT_TABLE)
+      .insert({ user_id: uid, english: en, urdu: ur, category: cat })
+      .select('id, english, urdu, category')
+      .single();
+    if (error) {
+      console.warn('[supabase] saveDictionaryEntry insert failed:', error.message);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.warn('[supabase] saveDictionaryEntry exception:', e);
+    return null;
+  }
+}
+
+/** Delete one custom dictionary entry by id. Returns true on success. */
+export async function deleteDictionaryEntry(id) {
+  const sb = getClient();
+  if (!sb || !id) return false;
+  const uid = await currentUserId();
+  if (!uid) return false;
+  try {
+    const { error } = await sb.from(DICT_TABLE).delete().eq('id', id).eq('user_id', uid);
+    if (error) {
+      console.warn('[supabase] deleteDictionaryEntry failed:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[supabase] deleteDictionaryEntry exception:', e);
+    return null;
+  }
+}

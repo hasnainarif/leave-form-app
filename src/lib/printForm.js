@@ -12,6 +12,8 @@
  * When no data URL is given, a styled Urdu text fallback is shown instead.
  */
 
+import { URDU_FONT_DATA_URI } from './urduFont.js';
+
 const esc = (s) =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -131,17 +133,24 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
 export function formStyles() {
   return `
   * { box-sizing: border-box; }
+  @font-face {
+    font-family: 'Noto Nastaliq Urdu';
+    src: url(${URDU_FONT_DATA_URI}) format('woff2');
+    font-weight: 400 700;
+    font-display: swap;
+  }
   html, body { margin: 0; padding: 0; background: #fff; color: #000; }
   body { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif; }
   @page { size: A4 landscape; margin: 8mm; }
   .clf-page {
-    display: flex; gap: 3mm; direction: rtl;
+    display: flex; gap: 5mm; direction: rtl;
+    justify-content: center; align-items: stretch;
     page-break-after: always; break-after: page;
     height: 192mm;
   }
   .clf-page:last-child { page-break-after: auto; break-after: auto; }
   .clf-form {
-    width: 48%; flex: 0 0 48%; height: 100%;
+    width: 138mm; flex: 0 0 138mm; height: 100%;
     display: flex; flex-direction: column;
     border: 2px solid #000; padding: 8px 14px 10px;
     direction: rtl; text-align: right; line-height: 2.25; font-size: 14px;
