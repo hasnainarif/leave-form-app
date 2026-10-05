@@ -179,6 +179,7 @@ const en = {
     empty: 'No words found.',
     count: (n) => n + ' words',
     all: 'All',
+    showMore: (n) => `Show ${n} more`,
   },
 
   settings: {
@@ -437,6 +438,7 @@ const ur = {
     empty: 'Koi lafz nahi mila.',
     count: (n) => n + ' alfaz',
     all: 'Sab',
+    showMore: (n) => `${n} aur dikhao`,
   },
 
   settings: {
