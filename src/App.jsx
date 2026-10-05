@@ -19,6 +19,7 @@ import { tr } from './lib/strings.js';
 const GEMINI_KEYS_LS = 'crown-leave-gemini-keys';
 const GEMINI_KEY_LS_OLD = 'crown-leave-gemini-key'; // legacy single key, migrated once
 const SMARTFIX_LS = 'crown-leave-smartfix';
+const HR_DEFAULT_OFF_LS = 'crown-leave-hr-default-off'; // '1' = user removed the bundled HR signature
 
 // Read saved keys; migrate the old single-key format on first run.
 function loadApiKeys() {
@@ -295,6 +296,24 @@ export default function App() {
   const [signatures, setSignatures] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const defaultHrSignUrl = useDefaultHrSignUrl();
+  // The bundled HR signature prints on every form unless the user removes it.
+  // Removing it is a deliberate choice, so it is remembered (and the default
+  // stays off until the user restores it).
+  const [hrDefaultOff, setHrDefaultOff] = useState(() => {
+    try {
+      return localStorage.getItem(HR_DEFAULT_OFF_LS) === '1';
+    } catch (e) {
+      return false;
+    }
+  });
+  const setHrDefaultOffPersist = (off) => {
+    setHrDefaultOff(off);
+    try {
+      localStorage.setItem(HR_DEFAULT_OFF_LS, off ? '1' : '0');
+    } catch (e) {
+      /* ignore */
+    }
+  };
 
   const [sheetMonth, setSheetMonth] = useState(() => new Date().getMonth() + 1);
   const [sheetYear, setSheetYear] = useState(() => new Date().getFullYear());
@@ -537,6 +556,7 @@ export default function App() {
           const placements = resolvePlacements(f, signatures);
           if (
             defaultHrSignUrl &&
+            !hrDefaultOff &&
             !placements.some((p) => p.position === 'hrManager')
           ) {
             placements.push({ imageUrl: defaultHrSignUrl, position: 'hrManager' });
@@ -546,7 +566,7 @@ export default function App() {
         _valid: !!leaveDate,
       };
     });
-  }, [forms, signatures, holidays, defaultHrSignUrl]);
+  }, [forms, signatures, holidays, defaultHrSignUrl, hrDefaultOff]);
 
   const doSignOut = async () => {
     await signOut();
@@ -802,6 +822,10 @@ export default function App() {
               signatures={signatures}
               onChange={setSignatures}
               userId={user.id}
+              defaultHrSignUrl={defaultHrSignUrl}
+              hrDefaultOff={hrDefaultOff}
+              onRemoveDefaultHr={() => setHrDefaultOffPersist(true)}
+              onRestoreDefaultHr={() => setHrDefaultOffPersist(false)}
             />
           )}
 

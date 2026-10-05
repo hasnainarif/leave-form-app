@@ -32,6 +32,9 @@ export default function SignatureManager({
   onChange = () => {},
   defaultHrSignUrl = null,
   userId = null,
+  hrDefaultOff = false,
+  onRemoveDefaultHr = () => {},
+  onRestoreDefaultHr = () => {},
 }) {
   const t = (k, ...a) => tr(lang, k, ...a);
 
@@ -216,8 +219,8 @@ export default function SignatureManager({
       {notice && <div style={s.notice}>{notice}</div>}
       {error && <div style={s.error}>{error}</div>}
 
-      {/* Default HR signature (bundled, common to every form, replaceable) */}
-      {!customHr && defaultHrSignUrl && (
+      {/* Default HR signature (bundled, common to every form, replaceable/removable) */}
+      {!customHr && defaultHrSignUrl && !hrDefaultOff && (
         <div style={s.card}>
           <div style={s.row}>
             <img src={defaultHrSignUrl} alt="Default HR signature" style={s.thumb} />
@@ -246,6 +249,33 @@ export default function SignatureManager({
                 }}
               />
             </label>
+            <button
+              type="button"
+              style={{ ...s.smallBtn, ...s.dangerBtn }}
+              onClick={() => {
+                if (window.confirm(t('signs.confirmDelete'))) onRemoveDefaultHr();
+              }}
+            >
+              {t('signs.removeDefault')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Default HR signature was removed by the user: offer to restore it */}
+      {!customHr && hrDefaultOff && (
+        <div style={s.card}>
+          <div style={{ fontSize: 13, color: 'var(--clf-text-dim)' }}>
+            {t('signs.defaultRemovedNote')}
+          </div>
+          <div style={s.btnRow}>
+            <button
+              type="button"
+              style={{ ...s.smallBtn, textAlign: 'center' }}
+              onClick={() => onRestoreDefaultHr()}
+            >
+              {t('signs.restoreDefault')}
+            </button>
           </div>
         </div>
       )}
