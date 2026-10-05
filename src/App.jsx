@@ -283,9 +283,12 @@ export default function App() {
   if (apiKeysRef.current === null) apiKeysRef.current = apiKeys;
   const [smartFixOn, setSmartFixOn] = useState(() => {
     try {
-      return localStorage.getItem(SMARTFIX_LS) === '1';
+      // Default ON: Gemini verifies names, designations, departments and
+      // reasons internally so nothing slips through in English. The user can
+      // still turn it off; that choice is remembered.
+      return localStorage.getItem(SMARTFIX_LS) !== '0';
     } catch (e) {
-      return false;
+      return true;
     }
   });
   const [signatures, setSignatures] = useState([]);

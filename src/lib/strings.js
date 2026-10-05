@@ -71,7 +71,7 @@ const en = {
     sub: 'Match each field to the right column. Name and Date are required.',
     smartTitle: 'Fix Urdu with Gemini',
     smartSub:
-      'Clean up names and departments into proper Urdu script using your API keys.',
+      'Clean up names, designations, departments and reasons into proper Urdu script using your API keys.',
     keysConfigured: (n) => `${n} key${n === 1 ? '' : 's'} configured`,
     manageKeys: 'Manage keys',
     smartOn: 'Smart Urdu fix is ON',
