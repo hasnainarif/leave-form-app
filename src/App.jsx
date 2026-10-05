@@ -4,7 +4,7 @@ import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
 import PinLock from './components/PinLock.jsx';
 import { hasPin } from './lib/pin.js';
-import { transliterateRow, buildCustomDict } from './lib/transliterate.js';
+import { transliterateRow, buildCustomDict, dictMatch } from './lib/transliterate.js';
 import { URDU_FONT_DATA_URI } from './lib/urduFont.js';
 
 // Make the proper Urdu (Nastaliq) font available to the whole app shell,
@@ -186,7 +186,16 @@ async function buildForms(rawRows, mapping, opts) {
         // caused drift (e.g. a correct name turning wrong on the second run).
         const orig = (f.english && f.english[k]) || '';
         const text = (orig.trim() ? orig : f[k] || '').trim();
-        if (text) items.push({ fi, k, text });
+        if (!text) return;
+        // PROTECT trusted dictionary mappings: when the English value has an
+        // exact dictionary match (built-in or the user's own), the local
+        // result is final and Gemini must not overwrite it
+        // (e.g. KNITTING -> نیٹنگ was being replaced by ٹسٹنگ).
+        if (orig.trim() && dictMatch(orig, k, customDict)) {
+          stats.protected = (stats.protected || 0) + 1;
+          return;
+        }
+        items.push({ fi, k, text });
       });
     });
     stats.attempted = items.length;

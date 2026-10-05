@@ -59,7 +59,7 @@ export const DEPT_DICT = {
   'INDUSTRIAL ENGINEERING': 'انڈسٹریل انجینئرنگ',
   'IRONING': 'استری',
   'IT': 'آئی ٹی',
-  'KNITTING': 'نٹنگ',
+  'KNITTING': 'نیٹنگ',
   'LAB': 'لیب',
   'LABORATORY': 'لیبارٹری',
   'LAUNDRY': 'لانڈری',
@@ -185,13 +185,13 @@ export const DESIG_DICT = {
   'KANSAI OPERATOR': 'کنسائی آپریٹر',
   'KANTA OPERATOR': 'کانٹا آپریٹر',
   'KARIGAR': 'کاریگر',
-  'KNITTING OPERATOR': 'نٹنگ آپریٹر',
+  'KNITTING OPERATOR': 'نیٹنگ آپریٹر',
   'LAB ASSISTANT': 'لیب اسسٹنٹ',
   'LAB TECHNICIAN': 'لیب ٹیکنیشن',
   'LAUNDRY OPERATOR': 'لانڈری آپریٹر',
   'LINE CHECKER': 'لائن چیکر',
   'LINE INCHARGE': 'لائن انچارج',
-  'LINE QC': 'لائن کیو سی',
+  'LINE QC': 'لائن کوالٹی چیکر',
   'M OPT': 'مشین آپریٹر',
   'M-OPT': 'مشین آپریٹر',
   'MACHINE OPERATOR': 'مشین آپریٹر',
@@ -258,10 +258,11 @@ export const DESIG_DICT = {
   'WINDING OPERATOR': 'وائنڈنگ آپریٹر',
   'HTL': 'مشین آپریٹر (ایچ ٹی ایل)',
   'MOPT': 'مشین آپریٹر',
+  'MOPTT': 'مشین آپریٹر',
   'OPT': 'مشین آپریٹر',
   'OVERLOCK OPT': 'مشین آپریٹر',
   'SHAPER': 'شیپر',
-  'KNITTING': 'نٹنگ',
+  'KNITTING': 'نیٹنگ',
 };
 
 /** Common Pakistani person-name components with correct Urdu spellings.
@@ -701,6 +702,65 @@ export function transliterate(text, kind, customDict) {
   }
 
   return phonetic(cleaned);
+}
+
+/**
+ * Return the DICTIONARY value for an English string, or null when there is
+ * no dictionary match. No phonetic fallback.
+ *
+ * Used to protect trusted mappings: when this returns a value, the local
+ * result came straight from the user's dictionary or the built-in one, and
+ * Gemini Smart Fix must NOT overwrite it (e.g. KNITTING -> نیٹنگ).
+ * kind: 'name' | 'father' | 'designation' | 'department' | 'reason'.
+ */
+export function dictMatch(text, kind, customDict) {
+  if (text === null || text === undefined) return null;
+  const cleaned = String(text)
+    .replace(/[\\/:;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  const key = cleanKey(cleaned);
+
+  // The user's own dictionary always wins over the built-in one.
+  if (customDict && kind && customDict[kind] && customDict[kind][key]) {
+    return customDict[kind][key];
+  }
+
+  const dict =
+    kind === 'department' ? DEPT_DICT
+    : kind === 'designation' ? DESIG_DICT
+    : kind === 'reason' ? REASON_DICT
+    : kind === 'name' || kind === 'father' ? NAME_DICT
+    : null;
+  if (!dict) return null;
+
+  if (dict[key]) return dict[key];
+
+  // Department values often carry a unit number, e.g. 'STITCHING 04'.
+  if (kind === 'department') {
+    const m = key.match(/^(.+?)[\s\-]*(\d+)$/);
+    if (m) {
+      const base = m[1].trim();
+      if (customDict && customDict.department && customDict.department[base]) {
+        return `${customDict.department[base]} ${m[2]}`;
+      }
+      if (DEPT_DICT[base]) return `${DEPT_DICT[base]} ${m[2]}`;
+    }
+  }
+
+  // Multi-word names built word-by-word from the name dictionary.
+  if (kind === 'name' || kind === 'father') {
+    const words = key.split(' ').filter(Boolean);
+    if (words.length > 1) {
+      const parts = words.map((w) =>
+        customDict && customDict[kind] && customDict[kind][w] ? customDict[kind][w] : dict[w]
+      );
+      if (parts.every(Boolean)) return parts.join(' ');
+    }
+  }
+
+  return null;
 }
 
 /**
