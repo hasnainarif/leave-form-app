@@ -259,7 +259,7 @@ export const DESIG_DICT = {
   'HTL': 'مشین آپریٹر (ایچ ٹی ایل)',
   'MOPT': 'مشین آپریٹر',
   'OPT': 'مشین آپریٹر',
-  'OVERLOCK OPT': 'اوور لاک مشین آپریٹر',
+  'OVERLOCK OPT': 'مشین آپریٹر',
   'SHAPER': 'شیپر',
 };
 
