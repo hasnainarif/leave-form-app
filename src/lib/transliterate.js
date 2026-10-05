@@ -256,6 +256,11 @@ export const DESIG_DICT = {
   'WELDER': 'ویلڈر',
   'WELFARE OFFICER': 'ویلفیئر آفیسر',
   'WINDING OPERATOR': 'وائنڈنگ آپریٹر',
+  'HTL': 'مشین آپریٹر (ایچ ٹی ایل)',
+  'MOPT': 'مشین آپریٹر',
+  'OPT': 'مشین آپریٹر',
+  'OVERLOCK OPT': 'اوور لاک مشین آپریٹر',
+  'SHAPER': 'شیپر',
 };
 
 /** Common Pakistani person-name components with correct Urdu spellings.
