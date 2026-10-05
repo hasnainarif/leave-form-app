@@ -147,9 +147,11 @@ const URDU_FIX_PROMPT_HEAD =
   `Rules:\n` +
   `- [name] / [father]: transliterate the person's name with correct Urdu spelling ` +
   `(e.g. "MUHAMMAD ASLAM" -> "محمد اسلم", "RUQSANA BIBI" -> "رقصانہ بی بی").\n` +
-  `- [designation]: translate common job titles (e.g. "OFFICER" -> "آفیسر").\n` +
-  `- [department]: translate generic words but KEEP department codes in English ` +
-  `(e.g. "STITCHING 04" stays "STITCHING 04").\n` +
+  `- [designation]: translate job titles to Urdu (e.g. "OFFICER" -> "آفیسر", ` +
+  `"PACKER" -> "پیکر", "CROPPER" -> "کراپر", "ASSISTANT" -> "اسسٹنٹ").\n` +
+  `- [department]: translate department names to Urdu, keeping any numbers ` +
+  `as-is (e.g. "CUTTING" -> "کٹنگ", "FINISHING" -> "فنشنگ", ` +
+  `"COMPLIANCE" -> "کمپلائنس", "STITCHING 04" -> "اسٹچنگ 04").\n` +
   `- [reason]: translate to natural Urdu (e.g. "Due to sick" -> "بیماری کی وجہ سے").\n` +
   `- Return ONLY a JSON array of Urdu strings, in the same order, no commentary.\n` +
   `Values:\n`;
