@@ -11,20 +11,106 @@ import * as XLSX from 'xlsx';
 /**
  * Read an uploaded file (.xlsx / .xls / .csv) and return its first sheet as
  * { headers: string[], rows: object[] }.
- * Rows are objects keyed by the (trimmed) header names; empty cells become ''.
+ *
+ * Smart header detection (handles real-world factory sheets):
+ *  - Title rows ("LEAVE SEPTEMBER 2026"), blank rows, etc. above the real
+ *    header are skipped automatically: the first ~15 rows are scanned and
+ *    the row containing the most known column keywords wins.
+ *  - A sub-header row directly below (e.g. "Date"/"Reason" under
+ *    "Sick"/"") is merged into the header ("Sick Date", "Reason").
+ *  - Falls back to the first non-empty row when nothing looks like a header.
+ *
+ * Rows are objects keyed by the (trimmed, deduped) header names; empty cells
+ * become ''.
  */
 export async function parseFile(file) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
-  if (!json.length) return { headers: [], rows: [] };
-  const headers = Object.keys(json[0]).map((h) => String(h).trim());
-  const rows = json.map((r) => {
-    const o = {};
-    for (const h of headers) o[h] = r[h] == null ? '' : r[h];
-    return o;
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  if (!aoa.length) return { headers: [], rows: [] };
+
+  const cellText = (c) => String(c == null ? '' : c).trim();
+
+  // Known column words used to recognize a header row.
+  const KEYWORDS = [
+    'ecode', 'empcode', 'employeecode', 'workercode', 'cardno',
+    'name', 'father', 'husband', 'guardian', 'sonof',
+    'designation', 'des', 'post', 'occupation',
+    'department', 'dept', 'section',
+    'sick', 'leave', 'date', 'day', 'reason', 'remarks',
+  ];
+  const scoreRow = (row) => {
+    let s = 0;
+    const seen = new Set();
+    for (const cell of row) {
+      const n = normHeader(cellText(cell));
+      if (!n) continue;
+      for (const k of KEYWORDS) {
+        if ((n === k || n.includes(k)) && !seen.has(k)) {
+          seen.add(k);
+          s += n === k ? 2 : 1;
+          break;
+        }
+      }
+    }
+    return s;
+  };
+
+  // 1. Find the header row.
+  let headerIdx = -1;
+  let best = 0;
+  const scan = Math.min(aoa.length, 15);
+  for (let i = 0; i < scan; i++) {
+    const s = scoreRow(aoa[i]);
+    if (s > best) {
+      best = s;
+      headerIdx = i;
+    }
+  }
+  if (headerIdx < 0) {
+    headerIdx = aoa.findIndex((r) => r.some((c) => cellText(c) !== ''));
+    if (headerIdx < 0) return { headers: [], rows: [] };
+  }
+
+  // 2. Merge a sub-header row when it is header-like and improves the score.
+  let headers = aoa[headerIdx].map(cellText);
+  let dataStart = headerIdx + 1;
+  const subRow = aoa[headerIdx + 1];
+  if (subRow && subRow.some((c) => cellText(c) !== '') && scoreRow(subRow) >= 2) {
+    const merged = headers.map((h, i) => {
+      const s = cellText(subRow[i]);
+      if (h && s) return `${h} ${s}`;
+      return h || s;
+    });
+    if (scoreRow(merged) > scoreRow(headers)) {
+      headers = merged;
+      dataStart = headerIdx + 2;
+    }
+  }
+
+  // 3. Dedupe / fill blank header names so row objects stay intact.
+  const seenNames = new Map();
+  headers = headers.map((h, i) => {
+    let name = h || `Column ${i + 1}`;
+    const n = seenNames.get(name) || 0;
+    seenNames.set(name, n + 1);
+    if (n > 0) name = `${name} (${n + 1})`;
+    return name;
   });
+
+  // 4. Data rows: skip fully-blank rows.
+  const rows = [];
+  for (let i = dataStart; i < aoa.length; i++) {
+    const r = aoa[i];
+    if (!r.some((c) => cellText(c) !== '')) continue;
+    const o = {};
+    for (let c = 0; c < headers.length; c++) {
+      const v = r[c];
+      o[headers[c]] = v == null ? '' : v;
+    }
+    rows.push(o);
+  }
   return { headers, rows };
 }
 
@@ -37,7 +123,7 @@ const COL_SPECS = [
   ['father', ['fathername', 'father', 'husband', 'guardian', 'sonof', 'fname']],
   ['designation', ['designation', 'des', 'post', 'occupation', 'title']],
   ['department', ['deptname', 'departmentname', 'department', 'dept', 'section']],
-  ['date', ['leavedate', 'date', 'day', 'dt']],
+  ['date', ['leavedate', 'sickdate', 'sickday', 'date', 'day', 'dt']],
   ['reason', ['reason', 'remarks', 'purpose', 'waja']],
 ];
 

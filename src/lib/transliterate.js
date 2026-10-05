@@ -226,6 +226,7 @@ export const DESIG_DICT = {
   'QUALITY CHECKER': 'کوالٹی چیکر',
   'RANGE MAN': 'رینج مین',
   'RECEPTIONIST': 'ریسپشنسٹ',
+  'RIDER': 'رائیڈر',
   'SANITARY WORKER': 'سینٹری ورکر',
   'SARDAR': 'سردار',
   'SECTION INCHARGE': 'سیکشن انچارج',
