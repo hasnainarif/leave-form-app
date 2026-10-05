@@ -129,28 +129,56 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
 /**
  * The complete form stylesheet. Exported so the app's on-screen preview can
  * inject the exact same styles.
+ *
+ * opts: { font: 'new' | 'old', layout: 'new' | 'old' }
+ *  - font 'new': embedded Noto Nastaliq Urdu. 'old': previous system-font stack.
+ *  - layout 'new': both forms centered on A4. 'old': previous 48% flex-start.
  */
-export function formStyles() {
-  return `
-  * { box-sizing: border-box; }
+export function formStyles(opts = {}) {
+  const font = opts.font === 'old' ? 'old' : 'new';
+  const layout = opts.layout === 'old' ? 'old' : 'new';
+
+  const fontFace =
+    font === 'new'
+      ? `
   @font-face {
     font-family: 'Noto Nastaliq Urdu';
     src: url(${URDU_FONT_DATA_URI}) format('woff2');
     font-weight: 400 700;
     font-display: swap;
-  }
-  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-  body { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif; }
-  @page { size: A4 landscape; margin: 8mm; }
+  }`
+      : '';
+  const fontFamily =
+    font === 'new'
+      ? `'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif`
+      : `'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif`;
+
+  const pageCss =
+    layout === 'new'
+      ? `
   .clf-page {
     display: flex; gap: 5mm; direction: rtl;
     justify-content: center; align-items: stretch;
     page-break-after: always; break-after: page;
     height: 192mm;
-  }
+  }`
+      : `
+  .clf-page {
+    display: flex; gap: 3mm; direction: rtl;
+    page-break-after: always; break-after: page;
+    height: 192mm;
+  }`;
+  const formWidthCss =
+    layout === 'new' ? `width: 138mm; flex: 0 0 138mm;` : `width: 48%; flex: 0 0 48%;`;
+
+  return `
+  * { box-sizing: border-box; }${fontFace}
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  body { font-family: ${fontFamily}; }
+  @page { size: A4 landscape; margin: 8mm; }${pageCss}
   .clf-page:last-child { page-break-after: auto; break-after: auto; }
   .clf-form {
-    width: 138mm; flex: 0 0 138mm; height: 100%;
+    ${formWidthCss} height: 100%;
     display: flex; flex-direction: column;
     border: 2px solid #000; padding: 8px 14px 10px;
     direction: rtl; text-align: right; line-height: 2.25; font-size: 14px;
@@ -215,8 +243,9 @@ export function formStyles() {
  * forms. formsHTML is the concatenated output of renderForm() calls
  * (each begins with the <!--clf-form--> marker). Forms are paired into
  * A4 landscape pages, two per page.
+ * opts is passed through to formStyles() ({ font, layout }).
  */
-export function buildPrintableDocument(formsHTML) {
+export function buildPrintableDocument(formsHTML, opts = {}) {
   const forms = String(formsHTML || '')
     .split('<!--clf-form-->')
     .map((f) => f.trim())
@@ -234,7 +263,7 @@ export function buildPrintableDocument(formsHTML) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Leave Forms - Crown Textile</title>
-<style>${formStyles()}</style>
+<style>${formStyles(opts)}</style>
 </head>
 <body>
 ${pages}

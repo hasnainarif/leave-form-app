@@ -63,9 +63,9 @@ function useLogoDataUrl() {
   return logoDataUrl;
 }
 
-function safeBuildDocument(formsHTML) {
+function safeBuildDocument(formsHTML, opts) {
   try {
-    return buildPrintableDocument(formsHTML);
+    return buildPrintableDocument(formsHTML, opts);
   } catch (e) {
     return (
       '<!doctype html><html><head><meta charset="utf-8"><title>Leave Forms</title></head>' +
@@ -124,6 +124,38 @@ function ScaledPreview({ html }) {
 export default function Generate({ lang = 'en', forms, signatures, onPrint, onDownload, onBack, onNewBatch = () => {} }) {
   const t = (k, ...a) => tr(lang, k, ...a);
   const logoDataUrl = useLogoDataUrl();
+  // Print settings: font + page layout, both with old/new choice. Remembered.
+  const [printFont, setPrintFont] = useState(() => {
+    try {
+      return localStorage.getItem('crown-leave-print-font') === 'old' ? 'old' : 'new';
+    } catch (e) {
+      return 'new';
+    }
+  });
+  const [printLayout, setPrintLayout] = useState(() => {
+    try {
+      return localStorage.getItem('crown-leave-print-layout') === 'old' ? 'old' : 'new';
+    } catch (e) {
+      return 'new';
+    }
+  });
+  const changePrintFont = (v) => {
+    setPrintFont(v);
+    try {
+      localStorage.setItem('crown-leave-print-font', v);
+    } catch (e) {
+      /* ignore */
+    }
+  };
+  const changePrintLayout = (v) => {
+    setPrintLayout(v);
+    try {
+      localStorage.setItem('crown-leave-print-layout', v);
+    } catch (e) {
+      /* ignore */
+    }
+  };
+  const styleOpts = { font: printFont, layout: printLayout };
   const valid = useMemo(() => (forms || []).filter((f) => f._valid), [forms]);
   const skipped = (forms || []).length - valid.length;
   const signedCount = useMemo(
@@ -136,7 +168,30 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
     () => valid.map((f) => safeRenderForm(toFormData(f), f.sigPlacements || [], logoDataUrl)),
     [valid, logoDataUrl]
   );
-  const docHTML = useMemo(() => safeBuildDocument(formsHTML), [formsHTML]);
+  const docHTML = useMemo(() => safeBuildDocument(formsHTML, styleOpts), [formsHTML, printFont, printLayout]);
+
+  const toggleRow = (label, value, onChange, options) => (
+    <div className="flex items-center gap-2">
+      <span className="w-24 shrink-0 text-xs font-bold text-slate-600 dark:text-slate-300">{label}</span>
+      <div className="flex flex-1 gap-2">
+        {options.map(([id, text]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onChange(id)}
+            className={
+              'min-h-[40px] flex-1 rounded-lg border px-2 text-xs font-bold transition ' +
+              (value === id
+                ? 'border-emerald-600 bg-emerald-600 text-white'
+                : 'border-slate-300 bg-white text-slate-600 hover:border-emerald-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300')
+            }
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -182,6 +237,19 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
         <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
           {t('generate.printNote')}
         </p>
+        <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800/60">
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            {t('generate.printSettings')}
+          </p>
+          {toggleRow(t('generate.fontLabel'), printFont, changePrintFont, [
+            ['new', t('generate.fontNew')],
+            ['old', t('generate.fontOld')],
+          ])}
+          {toggleRow(t('generate.layoutLabel'), printLayout, changePrintLayout, [
+            ['new', t('generate.layoutNew')],
+            ['old', t('generate.layoutOld')],
+          ])}
+        </div>
       </section>
 
       {valid.length === 0 ? (
@@ -190,7 +258,7 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
         </p>
       ) : (
         <div className="space-y-4">
-          <style>{formStyles()}</style>
+          <style>{formStyles(styleOpts)}</style>
           {formsHTML.map((html, i) => (
             <ScaledPreview key={(valid[i] && valid[i].id) || i} html={html} />
           ))}

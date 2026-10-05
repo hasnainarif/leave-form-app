@@ -237,6 +237,13 @@ const en = {
     empty: 'No printable forms.',
     printNote:
       'Print opens the A4 landscape layout. Choose Save as PDF there to make a PDF. The downloaded file can be opened and printed later.',
+    printSettings: 'Print settings',
+    fontLabel: 'Urdu font',
+    fontNew: 'Naya (Nastaliq)',
+    fontOld: 'Purana (System)',
+    layoutLabel: 'Page setting',
+    layoutNew: 'Nayi (Center)',
+    layoutOld: 'Purani',
   },
 
   user: { signOut: 'Sign out', signedInAs: 'Signed in as' },
@@ -488,6 +495,13 @@ const ur = {
     empty: 'Koi printable form nahi hai.',
     printNote:
       'Print dabane par A4 landscape layout khulega. Wahan Save as PDF chun kar PDF bhi bana sakte hain. Download wali file ko baad mein bhi khol kar print kiya ja sakta hai.',
+    printSettings: 'Print settings',
+    fontLabel: 'Urdu font',
+    fontNew: 'Naya (Nastaliq)',
+    fontOld: 'Purana (System)',
+    layoutLabel: 'Page setting',
+    layoutNew: 'Nayi (Center)',
+    layoutOld: 'Purani',
   },
 
   user: { signOut: 'Logout', signedInAs: 'Login hai:' },
