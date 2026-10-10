@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import Upload from './components/Upload.jsx';
+import ManualEntry from './components/ManualEntry.jsx';
 import Review from './components/Review.jsx';
 import Generate from './components/Generate.jsx';
 import PinLock from './components/PinLock.jsx';
@@ -305,6 +306,8 @@ export default function App() {
   const [view, setView] = useState('forms');
   // Workflow step inside the Forms view: 0 upload → 1 review → 2 generate.
   const [step, setStep] = useState(0);
+  // Step 0 entry mode: 'file' (Excel upload) or 'manual' (type details by hand).
+  const [entryMode, setEntryMode] = useState('file');
 
   // Settings live here at the top level and are NEVER wiped by a new upload.
   const [apiKeys, setApiKeys] = useState(loadApiKeys);
@@ -488,6 +491,45 @@ export default function App() {
     setBusyMsg(t('busy.parsing'));
     try {
       const built = await buildForms(rows, useMapping, {
+        apiKeys,
+        smartFixOn,
+        month: sheetMonth,
+        year: sheetYear,
+        customDict,
+        leaveType,
+        onProgress: (d, total) => setBusyMsg(t('busy.fixing', d, total)),
+      });
+      setHeaders(headers);
+      setMapping(useMapping);
+      setForms(built);
+      reportGeminiStats(built);
+      setStep(1);
+    } catch (e) {
+      setError(t('busy.parseFail'));
+    } finally {
+      setBusy(false);
+      setBusyMsg('');
+    }
+  };
+
+  // Manual entry: the operator types one employee's details by hand.
+  // Reuses the exact same buildForms pipeline (dictionary, smart fix, dates)
+  // as the Excel flow, so a hand-typed row behaves identically.
+  const handleManualSubmit = async (values) => {
+    setError('');
+    const headers = ['ecode', 'name', 'father', 'designation', 'department', 'date', 'reason'];
+    const row = {};
+    headers.forEach((h) => {
+      row[h] = values[h] != null ? String(values[h]) : '';
+    });
+    const useMapping = {};
+    headers.forEach((h) => {
+      useMapping[h] = h;
+    });
+    setBusy(true);
+    setBusyMsg(t('busy.parsing'));
+    try {
+      const built = await buildForms([row], useMapping, {
         apiKeys,
         smartFixOn,
         month: sheetMonth,
@@ -796,18 +838,56 @@ export default function App() {
               </nav>
 
               {step === 0 && (
-                <Upload
-                  lang={lang}
-                  onParsed={handleParsed}
-                  month={sheetMonth}
-                  year={sheetYear}
-                  onMonthYear={(m, y) => {
-                    setSheetMonth(m);
-                    setSheetYear(y);
-                  }}
-                  leaveType={leaveType}
-                  onLeaveType={setLeaveType}
-                />
+                <div>
+                  <div
+                    className="mb-4 grid grid-cols-2 gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-zinc-100 dark:bg-slate-900 dark:ring-slate-800"
+                    role="tablist"
+                    aria-label="Entry mode"
+                  >
+                    {[
+                      ['file', '📁', t('manual.tabFile')],
+                      ['manual', '✍️', t('manual.tabManual')],
+                    ].map(([id, icon, label]) => (
+                      <button
+                        key={id}
+                        role="tab"
+                        aria-selected={entryMode === id}
+                        type="button"
+                        onClick={() => setEntryMode(id)}
+                        className={
+                          'min-h-[48px] rounded-xl text-sm font-extrabold transition ' +
+                          (entryMode === id
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                            : 'text-zinc-500 hover:bg-zinc-50 dark:text-slate-400 dark:hover:bg-slate-800')
+                        }
+                      >
+                        {icon} {label}
+                      </button>
+                    ))}
+                  </div>
+                  {entryMode === 'file' ? (
+                    <Upload
+                      lang={lang}
+                      onParsed={handleParsed}
+                      month={sheetMonth}
+                      year={sheetYear}
+                      onMonthYear={(m, y) => {
+                        setSheetMonth(m);
+                        setSheetYear(y);
+                      }}
+                      leaveType={leaveType}
+                      onLeaveType={setLeaveType}
+                    />
+                  ) : (
+                    <ManualEntry
+                      lang={lang}
+                      leaveType={leaveType}
+                      onLeaveType={setLeaveType}
+                      onSubmit={handleManualSubmit}
+                      busy={busy}
+                    />
+                  )}
+                </div>
               )}
               {step === 1 && (
                 <Review
