@@ -243,6 +243,10 @@ export function formStyles(opts = {}) {
  * forms. formsHTML is the concatenated output of renderForm() calls
  * (each begins with the <!--clf-form--> marker). Forms are paired into
  * A4 landscape pages, two per page.
+ *
+ * When a page would have only one form (e.g. a single leave), that form is
+ * printed twice side by side (duplicate copy: office + worker), so every
+ * page always looks the same — two forms per landscape page.
  * opts is passed through to formStyles() ({ font, layout }).
  */
 export function buildPrintableDocument(formsHTML, opts = {}) {
@@ -253,7 +257,8 @@ export function buildPrintableDocument(formsHTML, opts = {}) {
 
   let pages = '';
   for (let i = 0; i < forms.length; i += 2) {
-    const pair = forms[i] + (forms[i + 1] ? `\n${forms[i + 1]}` : '');
+    const second = forms[i + 1] || forms[i]; // duplicate when odd
+    const pair = forms[i] + `\n${second}`;
     pages += `<div class="clf-page">${pair}</div>\n`;
   }
 
