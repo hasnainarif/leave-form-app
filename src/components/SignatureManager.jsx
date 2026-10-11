@@ -15,6 +15,7 @@ import {
   uploadSignatureImage,
 } from '../lib/supabase.js';
 import { tr } from '../lib/strings.js';
+import { isLocalMode, fileToDataUrl } from '../lib/localMode.js';
 
 const emptyDraft = () => ({
   file: null,
@@ -193,6 +194,15 @@ export default function SignatureManager({
         const imageUrl = await uploadSignatureImage(draft.file);
         const saved = await upsertSignature({ ...base, imageUrl });
         sig = saved || { ...base, id: 'local-' + Date.now(), imageUrl };
+      } else if (isLocalMode()) {
+        // PC build: data URL survives restarts (blob: URLs do not).
+        let imageUrl = draft.preview;
+        try {
+          imageUrl = await fileToDataUrl(draft.file);
+        } catch (e) {
+          // fall back to the session preview
+        }
+        sig = { ...base, id: 'local-' + Date.now(), imageUrl };
       } else {
         sig = { ...base, id: 'local-' + Date.now(), imageUrl: draft.preview };
       }
@@ -224,6 +234,14 @@ export default function SignatureManager({
         const imageUrl = await uploadSignatureImage(file);
         const saved = await upsertSignature({ ...base, imageUrl });
         sig = saved || { ...base, id: 'local-' + Date.now(), imageUrl };
+      } else if (isLocalMode()) {
+        let imageUrl = null;
+        try {
+          imageUrl = await fileToDataUrl(file);
+        } catch (e) {
+          imageUrl = URL.createObjectURL(file);
+        }
+        sig = { ...base, id: 'local-' + Date.now(), imageUrl };
       } else {
         sig = { ...base, id: 'local-' + Date.now(), imageUrl: URL.createObjectURL(file) };
       }

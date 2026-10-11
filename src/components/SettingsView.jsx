@@ -32,6 +32,9 @@ export default function SettingsView({
   sheetMonth,
   sheetYear,
   onMonthYear = () => {},
+  localMode = false,
+  onlineMode = true,
+  onOnlineMode = () => {},
 }) {
   const t = (p, ...a) => tr(lang, p, ...a);
   const keyList = Array.isArray(apiKeys) ? apiKeys : [];
@@ -207,6 +210,43 @@ export default function SettingsView({
       <h1 className="text-xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
         {t('settings.title')}
       </h1>
+
+      {localMode && (
+        <section className={card} style={{ borderColor: '#f59e0b' }}>
+          <h3 className={h3}>👑 {t('superadmin.title')}</h3>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-slate-400">
+            {t('superadmin.sub')}
+          </p>
+          <button
+            type="button"
+            onClick={() => onOnlineMode(!onlineMode)}
+            aria-pressed={onlineMode}
+            className={
+              'mt-3 flex min-h-[56px] w-full items-center justify-between rounded-2xl border-2 px-4 font-extrabold transition ' +
+              (onlineMode
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
+                : 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300')
+            }
+          >
+            <span className="text-left">
+              <span className="block text-base">
+                {onlineMode ? '🟢 ' + t('superadmin.online') : '🔴 ' + t('superadmin.offline')}
+              </span>
+              <span className="block text-xs font-semibold opacity-80">
+                {onlineMode ? t('superadmin.onlineNote') : t('superadmin.offlineNote')}
+              </span>
+            </span>
+            <span
+              className={
+                'flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition ' +
+                (onlineMode ? 'justify-end bg-emerald-500' : 'justify-start bg-zinc-400 dark:bg-slate-600')
+              }
+            >
+              <span className="h-6 w-6 rounded-full bg-white shadow" />
+            </span>
+          </button>
+        </section>
+      )}
 
       <section className={card}>
         <h3 className={h3}>{t('settings.appearance')}</h3>
