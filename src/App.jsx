@@ -32,6 +32,22 @@ import SignaturesView from './components/SignaturesView.jsx';
 import DictionaryView from './components/DictionaryView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import { tr } from './lib/strings.js';
+import {
+  isLocalMode,
+  LOCAL_USER,
+  loadLocalSignatures,
+  saveLocalSignatures,
+  loadLocalDictionary,
+  saveLocalDictionary,
+  loadLocalHolidays,
+  saveLocalHolidays,
+  loadOnlineMode,
+  saveOnlineMode,
+} from './lib/localMode.js';
+
+// True inside the Electron PC build (window.electronAPI injected by preload).
+// Local mode: no login, everything stored on the PC, master online/offline switch.
+const LOCAL_MODE = isLocalMode();
 
 // LocalStorage keys. Settings.jsx (sibling) uses GEMINI_KEYS_LS too so the
 // key list and App state never disagree. App writes it on every change anyway.
@@ -323,9 +339,37 @@ export default function App() {
       return true;
     }
   });
-  const [signatures, setSignatures] = useState([]);
-  const [holidays, setHolidays] = useState([]);
-  const [customDictRows, setCustomDictRows] = useState([]);
+  const [signatures, setSignatures] = useState(() =>
+    LOCAL_MODE ? loadLocalSignatures() : []
+  );
+  const [holidays, setHolidays] = useState(() =>
+    LOCAL_MODE ? loadLocalHolidays() : []
+  );
+  const [customDictRows, setCustomDictRows] = useState(() =>
+    LOCAL_MODE ? loadLocalDictionary() : []
+  );
+  // Local mode: persist everything on the PC itself.
+  useEffect(() => {
+    if (LOCAL_MODE) saveLocalSignatures(signatures);
+  }, [signatures]);
+  useEffect(() => {
+    if (LOCAL_MODE) saveLocalDictionary(customDictRows);
+  }, [customDictRows]);
+  useEffect(() => {
+    if (LOCAL_MODE) saveLocalHolidays(holidays);
+  }, [holidays]);
+  // Master network switch (PC build): the superadmin decides whether the app
+  // may touch the internet at all. Offline = Gemini never called, zero
+  // external requests. Persisted, and reported to the Electron shell so it
+  // can hard-block the network.
+  const [onlineMode, setOnlineMode] = useState(loadOnlineMode);
+  const setOnlineModePersist = (on) => {
+    setOnlineMode(!!on);
+    saveOnlineMode(!!on);
+  };
+  // Gemini only runs when the user enabled Smart Fix AND the master switch
+  // allows the network. (Web build: onlineMode is always true.)
+  const effectiveSmartFix = smartFixOn && onlineMode;
   const customDict = useMemo(() => buildCustomDict(customDictRows), [customDictRows]);
   const defaultHrSignUrl = useDefaultHrSignUrl();
   // The bundled HR signature prints on every form unless the user removes it.
@@ -372,12 +416,21 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(() => !hasPin());
 
   // Auth: the whole app sits behind a confirmed login. No local mode.
+  // (PC build: LOCAL_MODE skips all of this — the superadmin is signed in
+  // locally, no account needed.)
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const userRef = useRef(null);
   const cloudSyncedRef = useRef(false);
 
   useEffect(() => {
+    if (LOCAL_MODE) {
+      userRef.current = LOCAL_USER;
+      setUser(LOCAL_USER);
+      setAuthReady(true);
+      saveOnlineMode(loadOnlineMode());
+      return;
+    }
     let alive = true;
     const syncCloud = async () => {
       const u = userRef.current;
@@ -492,7 +545,7 @@ export default function App() {
     try {
       const built = await buildForms(rows, useMapping, {
         apiKeys,
-        smartFixOn,
+        smartFixOn: effectiveSmartFix,
         month: sheetMonth,
         year: sheetYear,
         customDict,
@@ -531,7 +584,7 @@ export default function App() {
     try {
       const built = await buildForms([row], useMapping, {
         apiKeys,
-        smartFixOn,
+        smartFixOn: effectiveSmartFix,
         month: sheetMonth,
         year: sheetYear,
         customDict,
@@ -593,7 +646,7 @@ export default function App() {
     try {
       const rebuilt = await buildForms(rawRows, mapping || {}, {
         apiKeys,
-        smartFixOn: true,
+        smartFixOn: effectiveSmartFix,
         month: sheetMonth,
         year: sheetYear,
         customDict,
@@ -721,15 +774,30 @@ export default function App() {
         <nav className="flex-1 space-y-1.5">{NAV.map((n) => navBtn(n, false))}</nav>
         <div className="mt-6 rounded-2xl bg-zinc-50 p-3 dark:bg-slate-800">
           <p className="truncate text-xs font-semibold text-zinc-500 dark:text-slate-400">
-            {t('user.signedInAs')}
+            {LOCAL_MODE ? '👑 Superadmin' : t('user.signedInAs')}
           </p>
           <p className="truncate text-sm font-bold">{userEmail}</p>
-          <button
-            onClick={doSignOut}
-            className="mt-2 w-full rounded-full border border-zinc-200 bg-white py-1.5 text-xs font-bold text-zinc-600 transition hover:bg-zinc-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-          >
-            {t('user.signOut')}
-          </button>
+          {LOCAL_MODE ? (
+            <button
+              onClick={() => setView('settings')}
+              title={t('superadmin.modePill')}
+              className={
+                'mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-1.5 text-xs font-extrabold transition ' +
+                (onlineMode
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                  : 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300')
+              }
+            >
+              {onlineMode ? '🟢 ' + t('superadmin.online') : '🔴 ' + t('superadmin.offline')}
+            </button>
+          ) : (
+            <button
+              onClick={doSignOut}
+              className="mt-2 w-full rounded-full border border-zinc-200 bg-white py-1.5 text-xs font-bold text-zinc-600 transition hover:bg-zinc-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              {t('user.signOut')}
+            </button>
+          )}
         </div>
       </aside>
 
@@ -749,13 +817,27 @@ export default function App() {
             >
               {lang === 'en' ? 'اردو' : 'EN'}
             </button>
-            <button
-              onClick={doSignOut}
-              title={t('user.signOut')}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-            >
-              {userEmail ? userEmail[0].toUpperCase() : '•'}
-            </button>
+            {LOCAL_MODE ? (
+              <button
+                onClick={() => setView('settings')}
+                className={
+                  'rounded-full border px-3 py-1.5 text-xs font-extrabold ' +
+                  (onlineMode
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                    : 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300')
+                }
+              >
+                {onlineMode ? '🟢 ' + t('superadmin.online') : '🔴 ' + t('superadmin.offline')}
+              </button>
+            ) : (
+              <button
+                onClick={doSignOut}
+                title={t('user.signOut')}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+              >
+                {userEmail ? userEmail[0].toUpperCase() : '•'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -967,6 +1049,9 @@ export default function App() {
                 setSheetMonth(m);
                 setSheetYear(y);
               }}
+              localMode={LOCAL_MODE}
+              onlineMode={onlineMode}
+              onOnlineMode={setOnlineModePersist}
             />
           )}
         </main>
