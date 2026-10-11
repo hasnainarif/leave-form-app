@@ -13,6 +13,7 @@
  */
 
 import { URDU_FONT_DATA_URI } from './urduFont.js';
+import { CROWN_LOGO_DATA_URL } from './crownLogo.js';
 
 const esc = (s) =>
   String(s ?? '')
@@ -39,10 +40,11 @@ function sigSpot(label, position, sigPlacements) {
 }
 
 function logoBlock(logoDataUrl) {
-  if (logoDataUrl) {
-    return `<img class="clf-logoimg" src="${esc(logoDataUrl)}" alt="Crown Textile" />`;
-  }
-  return `<div class="clf-logofallback">کراؤن<br>ٹیکسٹائل</div>`;
+  // Hamesha embedded logo: preview, app print aur downloaded file teeno me
+  // reliable. Relative file path downloaded file me toot jata hai (Chrome me
+  // kholne par logo ghayeb) — is liye file path fallback hata diya.
+  const src = logoDataUrl || CROWN_LOGO_DATA_URL;
+  return `<img class="clf-logoimg" src="${esc(src)}" alt="Crown Textile" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" /><div class="clf-logofallback" style="display:none">کراؤن<br>ٹیکسٹائل</div>`;
 }
 
 /**
@@ -60,11 +62,15 @@ function logoBlock(logoDataUrl) {
  *   SIG_POSITIONS. A matching placement renders the signature image above
  *   that spot's line; otherwise the spot stays blank.
  * logoDataUrl: optional data URL of the Crown logo.
+ * branding: optional { companyName, companyUrdu, titleUrdu } — per-license
+ *   factory identity. Falls back to Crown Textile defaults.
  */
-export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
+export function renderForm(data, sigPlacements = [], logoDataUrl = null, branding = null) {
   const d = data || {};
   const type = LEAVE_TYPES.some((t) => t.id === d.leaveType) ? d.leaveType : 'sick';
   const qty = d.quantity != null && d.quantity !== '' ? d.quantity : '1';
+  const companyLine = 'کراؤن ٹیکسٹائل (لانڈھی یونٹ)';
+  const formTitle = (branding && branding.titleUrdu) || 'درخواست برائے چھٹی';
 
   const typeBoxes = LEAVE_TYPES.map((t) => {
     const tick = t.id === type ? '<span class="clf-tick">✓</span>' : '';
@@ -75,8 +81,8 @@ export function renderForm(data, sigPlacements = [], logoDataUrl = null) {
   <div class="clf-top">
     <div class="clf-logo">${logoBlock(logoDataUrl)}</div>
     <div class="clf-head">
-      <div class="clf-company">کراؤن ٹیکسٹائل (<span class="clf-nowrap">لانڈ‍ھی یونٹ</span>)</div>
-      <div class="clf-title">درخواست برائے چھٹی</div>
+      <div class="clf-company">${esc(companyLine)}</div>
+      <div class="clf-title">${esc(formTitle)}</div>
     </div>
     <div class="clf-balancer" aria-hidden="true"></div>
   </div>
@@ -175,8 +181,11 @@ export function formStyles(opts = {}) {
   * { box-sizing: border-box; }${fontFace}
   html, body { margin: 0; padding: 0; background: #fff; color: #000; }
   body { font-family: ${fontFamily}; }
-  @page { size: A4 landscape; margin: 8mm; }${pageCss}
+  @page { margin: 8mm; }${pageCss}
   .clf-page:last-child { page-break-after: auto; break-after: auto; }
+  /* Single form wala page beech me center NA ho — side par (RTL me right),
+     jese 2-form layout me pehla form hota hai. */
+  .clf-page-single { justify-content: flex-start; }
   .clf-form {
     ${formWidthCss} height: 100%;
     display: flex; flex-direction: column;
@@ -257,9 +266,10 @@ export function buildPrintableDocument(formsHTML, opts = {}) {
 
   let pages = '';
   for (let i = 0; i < forms.length; i += 2) {
-    const second = forms[i + 1] || forms[i]; // duplicate when odd
-    const pair = forms[i] + `\n${second}`;
-    pages += `<div class="clf-page">${pair}</div>\n`;
+    const second = forms[i + 1] || ''; // duplicate NAHI — khali jagah
+    const pair = forms[i] + (second ? `\n${second}` : '');
+    const singleCls = second ? '' : ' clf-page-single';
+    pages += `<div class="clf-page${singleCls}">${pair}</div>\n`;
   }
 
   return `<!DOCTYPE html>
