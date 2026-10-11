@@ -578,6 +578,26 @@ const ur = {
 
   user: { signOut: 'Logout', signedInAs: 'Login hai:' },
 
+  superadmin: {
+    title: 'Superadmin Controls',
+    sub: 'Ye PC wali app aap ki hai. Koi account nahi, koi cloud nahi — sab kuch isi computer me hai aur aap ke switch ke baghair kuch nahi hota.',
+    online: 'Online',
+    offline: 'Offline',
+    onlineNote: 'Smart Urdu fix ke liye Gemini API use hogi.',
+    offlineNote: 'Zero internet. Sirf dictionary aur local rules.',
+    modePill: 'Network mode — Settings me ja kar badlein',
+  },
+
+  superadmin: {
+    title: 'Superadmin Controls',
+    sub: 'This PC build is yours. No account, no cloud — everything stays on this computer and nothing happens without your switch.',
+    online: 'Online',
+    offline: 'Offline',
+    onlineNote: 'Gemini API is used for Smart Urdu fix.',
+    offlineNote: 'Zero internet. Dictionary + local rules only.',
+    modePill: 'Network mode — tap to change in Settings',
+  },
+
   busy: {
     working: 'Kaam ho raha hai...',
     parsing: 'File parh li. Urdu tayyar ki ja rahi hai...',
