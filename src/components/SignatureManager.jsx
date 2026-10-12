@@ -16,6 +16,57 @@ import {
 } from '../lib/supabase.js';
 import { tr } from '../lib/strings.js';
 import { isLocalMode, fileToDataUrl } from '../lib/localMode.js';
+import { getLicenseKey } from '../lib/license.js';
+import {
+  isLicenseSyncConfigured,
+  fetchLicenseSignatures,
+  pushLicenseSignatures,
+} from '../lib/licenseSync.js';
+
+/**
+ * License-key sync is active only in the Electron PC app, when a license key
+ * exists and the sync backend keys were baked in at build time. It never
+ * interferes with the logged-in web flow (isLocalMode() is false there).
+ */
+function licenseSyncActive() {
+  try {
+    return isLocalMode() && isLicenseSyncConfigured() && Boolean(getLicenseKey());
+  } catch {
+    return false;
+  }
+}
+
+// Content fingerprint for merge dedupe (ids differ across devices).
+function sigFingerprint(sig) {
+  const s = sig || {};
+  const img = String(s.imageUrl || '');
+  return [
+    s.label || '',
+    s.position || '',
+    s.conditionField || '',
+    s.conditionOp || '',
+    s.conditionValue || '',
+    img.length,
+    img.slice(0, 120),
+  ].join('|');
+}
+
+/**
+ * Merge remote (license-synced) signatures with local ones.
+ * Remote wins for identical content; local-only rows are kept.
+ */
+function mergeSignatures(local, remote) {
+  const seen = new Set((local || []).map(sigFingerprint));
+  const merged = [...(local || [])];
+  for (const r of remote || []) {
+    const fp = sigFingerprint(r);
+    if (!seen.has(fp)) {
+      merged.push(r);
+      seen.add(fp);
+    }
+  }
+  return merged;
+}
 
 const emptyDraft = () => ({
   file: null,
@@ -99,7 +150,8 @@ export default function SignatureManager({
   }, [signatures]);
   useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
 
-  // Load from DB when logged in, else session-memory mode. Reloads on login/logout.
+  // Load from DB when logged in; license-key sync in the PC app;
+  // else session-memory mode. Reloads on login/logout.
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -110,6 +162,19 @@ export default function SignatureManager({
         if (Array.isArray(rows)) {
           onChange(rows);
           setNotice('');
+        } else {
+          setNotice(t('signs.loadFail'));
+        }
+      } else if (licenseSyncActive()) {
+        // Buyer PC app, no login: sync via license key across the buyer's PCs.
+        const remote = await fetchLicenseSignatures();
+        if (!alive) return;
+        if (Array.isArray(remote)) {
+          const merged = mergeSignatures(sigsRef.current, remote);
+          onChange(merged);
+          setNotice('');
+          // Push the merged set back so other PCs converge (fire-and-forget).
+          pushLicenseSignatures(merged);
         } else {
           setNotice(t('signs.loadFail'));
         }
@@ -126,6 +191,27 @@ export default function SignatureManager({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // License-key sync: debounced push of the full list after any local change.
+  // Push never triggers onChange, so this cannot loop.
+  const licensePushTimer = useRef(null);
+  useEffect(() => {
+    if (!licenseSyncActive()) return;
+    if (licensePushTimer.current) clearTimeout(licensePushTimer.current);
+    licensePushTimer.current = setTimeout(() => {
+      pushLicenseSignatures(sigsRef.current);
+    }, 2000);
+    return () => {
+      if (licensePushTimer.current) clearTimeout(licensePushTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatures]);
+  useEffect(
+    () => () => {
+      if (licensePushTimer.current) clearTimeout(licensePushTimer.current);
+    },
+    []
+  );
 
   const doPersist = async (id) => {
     const sig = (sigsRef.current || []).find((x) => x.id === id);
@@ -256,7 +342,7 @@ export default function SignatureManager({
   const customHr = (signatures || []).find((s) => s.position === 'hr');
 
   const removeSig = async (sig) => {
-    if (!window.confirm(t('signs.confirmDelete'))) return;
+    // window.confirm Electron me kaam nahi karta — direct delete
     setBusyId(sig.id);
     try {
       if (isConfigured() && !String(sig.id).startsWith('local-')) {
@@ -395,7 +481,8 @@ export default function SignatureManager({
               type="button"
               style={{ ...s.smallBtn, ...s.dangerBtn }}
               onClick={() => {
-                if (window.confirm(t('signs.confirmDelete'))) onRemoveDefaultHr();
+                // window.confirm Electron me kaam nahi karta — direct action
+                onRemoveDefaultHr();
               }}
             >
               {t('signs.removeDefault')}

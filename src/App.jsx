@@ -24,6 +24,19 @@ try {
   /* ignore */
 }
 import { smartUrduFix } from './lib/gemini.js';
+import {
+  BUYER_MODE,
+  smartFixViaProxy,
+  checkLicense,
+  checkForUpdate,
+  validateOnline,
+  getLicenseKey,
+  setLicenseKey,
+  clearLicense,
+  isWellFormedKey,
+  getBranding,
+  APP_VERSION,
+} from './lib/license.js';
 import { parseLeaveDate, nextWorkingDay, fmt } from './lib/dates.js';
 import { isConfigured, getUser, onAuthChange, signOut, adoptOrphanRows, fetchSignatures, fetchHolidays, fetchApiKeys, saveApiKey, deleteApiKey, fetchDictionary } from './lib/supabase.js';
 import AuthScreen from './components/AuthScreen.jsx';
@@ -188,9 +201,12 @@ async function buildForms(rawRows, mapping, opts) {
   });
 
   // Stats so the UI can tell the user whether Gemini actually ran.
-  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && keys.length), keyErrors: [] };
+  // Buyer mode: the fix runs through the license server proxy (keys never
+  // touch the app), so no local keys are needed.
+  const useProxy = BUYER_MODE && smartFixOn;
+  const stats = { attempted: 0, fixed: 0, failed: false, skipped: !(smartFixOn && (keys.length || useProxy)), keyErrors: [] };
 
-  if (smartFixOn && keys.length) {
+  if ((smartFixOn && keys.length) || useProxy) {
     const kinds = ['name', 'father', 'designation', 'department', 'reason'];
     // Collect EVERY value across ALL forms in one list. smartUrduFix
     // dedups (Ali asked once even if on 10 forms), splits into bunches and
@@ -226,16 +242,40 @@ async function buildForms(rawRows, mapping, opts) {
       });
     };
     try {
-      const fixed = await smartUrduFix(
-        items.map((it) => it.text),
-        items.map((it) => it.k),
-        keys,
-        (done, total) => {
-          if (typeof onProgress === 'function') {
-            try { onProgress(done, total); } catch (e) { /* ignore */ }
+      let fixed;
+      if (useProxy) {
+        try {
+          fixed = await smartFixViaProxy(items.map((it) => ({ t: it.text, kind: it.k })));
+        } catch (proxyErr) {
+          // Fallback: if the server proxy has no keys configured but the user
+          // added local keys, use those directly instead of failing.
+          if (keys.length) {
+            fixed = await smartUrduFix(
+              items.map((it) => it.text),
+              items.map((it) => it.k),
+              keys,
+              (done, total) => {
+                if (typeof onProgress === 'function') {
+                  try { onProgress(done, total); } catch (e) { /* ignore */ }
+                }
+              }
+            );
+          } else {
+            throw proxyErr;
           }
         }
-      );
+      } else {
+        fixed = await smartUrduFix(
+          items.map((it) => it.text),
+          items.map((it) => it.k),
+          keys,
+          (done, total) => {
+            if (typeof onProgress === 'function') {
+              try { onProgress(done, total); } catch (e) { /* ignore */ }
+            }
+          }
+        );
+      }
       applyValues(fixed);
       if (typeof onProgress === 'function') {
         try { onProgress(items.length, items.length); } catch (e) { /* ignore */ }
@@ -415,6 +455,60 @@ export default function App() {
   const [pinSet] = useState(hasPin);
   const [unlocked, setUnlocked] = useState(() => !hasPin());
 
+  // Buyer license gate (licensed PC builds only; master builds skip).
+  // status: 'checking' | 'ok' | 'no-key' | 'locked'
+  const [licenseState, setLicenseState] = useState(() =>
+    BUYER_MODE ? { status: 'checking' } : { status: 'ok' }
+  );
+  const [licenseKeyInput, setLicenseKeyInput] = useState('');
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseError, setLicenseError] = useState('');
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  const runLicenseCheck = async () => {
+    if (!BUYER_MODE) return;
+    setLicenseState({ status: 'checking' });
+    const res = await checkLicense();
+    if (res.ok) {
+      setLicenseState({ status: 'ok', branding: res.branding || null, offline: !!res.offline });
+      // Update check (online only, failures are silent).
+      try {
+        const upd = await checkForUpdate();
+        if (upd) setUpdateInfo(upd);
+      } catch { /* ignore */ }
+    } else {
+      setLicenseState({ status: res.reason === 'no-key' ? 'no-key' : 'locked', reason: res.reason, branding: res.branding || null });
+    }
+  };
+
+  useEffect(() => {
+    if (BUYER_MODE) runLicenseCheck();
+  }, []);
+
+  const submitLicenseKey = async () => {
+    const k = licenseKeyInput.trim().toUpperCase();
+    if (!isWellFormedKey(k)) {
+      setLicenseError('Key sahi nahi lag rahi. Format: PREFIX-XXXXXXXX');
+      return;
+    }
+    setLicenseBusy(true);
+    setLicenseError('');
+    try {
+      setLicenseKey(k);
+      const res = await validateOnline(k);
+      if (res.status === 'valid') {
+        setLicenseState({ status: 'ok', branding: res.branding || null });
+      } else {
+        clearLicense();
+        setLicenseError('Ye key valid nahi hai (' + (res.reason || 'invalid') + ').');
+      }
+    } catch {
+      setLicenseError('Internet nahi mil raha. Pehli dafa key activate karne ke liye online hona zaroori hai.');
+    } finally {
+      setLicenseBusy(false);
+    }
+  };
+
   // Auth: the whole app sits behind a confirmed login. No local mode.
   // (PC build: LOCAL_MODE skips all of this — the superadmin is signed in
   // locally, no account needed.)
@@ -499,10 +593,77 @@ export default function App() {
   const [mapping, setMapping] = useState(null);
   const [forms, setForms] = useState([]);
 
+  // Saved batches — user can save finalized forms for later use without data loss
+  const SAVED_KEY = 'crown-leave-saved-batches';
+  const [savedBatches, setSavedBatches] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
+    } catch { return []; }
+  });
+  const persistSaved = (list) => {
+    setSavedBatches(list);
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(list)); } catch {}
+  };
+  const saveCurrentBatch = (name) => {
+    if (!forms.length) return;
+    const batch = {
+      id: Date.now().toString(),
+      name: name || `Batch ${new Date().toLocaleString()}`,
+      created: new Date().toISOString(),
+      count: forms.length,
+      forms: forms,
+      mapping: mapping || {},
+    };
+    persistSaved([batch, ...savedBatches]);
+    setNotice(lang === 'ur' ? `✅ "${batch.name}" save ho gaya` : `✅ "${batch.name}" saved`);
+    setTimeout(() => setNotice(''), 3000);
+  };
+  const loadBatch = (id) => {
+    const b = savedBatches.find(x => x.id === id);
+    if (b) {
+      setForms(b.forms || []);
+      // Saved batches now store their mapping; older batches saved before
+      // that need a fallback so manual entries can continue without the
+      // "columns must be mapped" block.
+      if (b.mapping && Object.keys(b.mapping).length) {
+        setMapping(b.mapping);
+      } else {
+        const identity = {};
+        ['ecode', 'name', 'father', 'designation', 'department', 'date', 'reason']
+          .forEach((f) => { identity[f] = f; });
+        setMapping(identity);
+      }
+    }
+  };
+  const deleteBatch = (id) => {
+    persistSaved(savedBatches.filter(x => x.id !== id));
+    setNotice(lang === 'ur' ? '🗑️ Batch delete ho gaya' : '🗑️ Batch deleted');
+    setTimeout(() => setNotice(''), 3000);
+  };
+
   const [busy, setBusy] = useState(false);
   const [busyMsg, setBusyMsg] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Floating scroll buttons: show "top" when scrolled down, "bottom" when not near bottom.
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setShowScrollTop(y > 300);
+      setShowScrollBottom(max > 400 && y < max - 300);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
 
   const handleApiKeys = (keys) => {
     const arr = (Array.isArray(keys) ? keys : [])
@@ -716,14 +877,96 @@ export default function App() {
     return <PinLock onUnlock={() => setUnlocked(true)} />;
   }
 
+  // ---- Buyer license gates ----
+  if (BUYER_MODE && licenseState.status === 'checking') {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#faf9f7] dark:bg-slate-950">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />
+          <p className="mt-3 text-sm font-semibold text-zinc-500">License check ho rahi hai…</p>
+        </div>
+      </div>
+    );
+  }
+  if (BUYER_MODE && licenseState.status === 'no-key') {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#faf9f7] p-4 dark:bg-slate-950">
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl dark:bg-slate-900">
+          <div className="text-center text-4xl">🔑</div>
+          <h1 className="mt-2 text-center text-xl font-extrabold">License Key</h1>
+          <p className="mt-1 text-center text-sm text-zinc-500">
+            Apni license key darj karein jo aap ko di gayi thi.
+          </p>
+          <input
+            value={licenseKeyInput}
+            onChange={(e) => setLicenseKeyInput(e.target.value.toUpperCase())}
+            placeholder="CROWN-XXXXXXXX"
+            className="mt-4 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-center font-mono text-lg font-bold tracking-widest dark:border-slate-700 dark:bg-slate-800"
+          />
+          {licenseError && <p className="mt-2 text-center text-sm font-semibold text-red-600">{licenseError}</p>}
+          <button
+            onClick={submitLicenseKey}
+            disabled={licenseBusy}
+            className="mt-4 min-h-[48px] w-full rounded-2xl bg-emerald-600 text-base font-extrabold text-white disabled:opacity-50"
+          >
+            {licenseBusy ? 'Check ho rahi hai…' : 'Activate'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (BUYER_MODE && licenseState.status === 'locked') {
+    const reasonText = {
+      'suspended': 'Ye license suspend kar di gayi hai. Apne provider se rabta karein.',
+      'revoked': 'Ye license revoke kar di gayi hai. Apne provider se rabta karein.',
+      'invalid': 'Ye license valid nahi hai.',
+      'grace-expired': 'Offline muddat khatam. Internet on karke dobara kholein taake license verify ho sake.',
+      'offline': 'Internet nahi mil raha aur koi valid license cache nahi hai.',
+    }[licenseState.reason] || 'License ka masla hai.';
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#faf9f7] p-4 dark:bg-slate-950">
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-xl dark:bg-slate-900">
+          <div className="text-4xl">🔒</div>
+          <h1 className="mt-2 text-xl font-extrabold">App Locked</h1>
+          <p className="mt-2 text-sm text-zinc-500">{reasonText}</p>
+          <button
+            onClick={runLicenseCheck}
+            className="mt-4 min-h-[48px] w-full rounded-2xl bg-emerald-600 text-base font-extrabold text-white"
+          >
+            Dobara check karein
+          </button>
+          <button
+            onClick={() => {
+              clearLicense();
+              setLicenseKeyInput('');
+              setLicenseError('');
+              setLicenseState({ status: 'no-key' });
+            }}
+            className="mt-2 min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 text-base font-bold text-zinc-600 dark:border-slate-700 dark:text-zinc-300"
+          >
+            Nayi license key darj karein
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ---- App shell (WAbot-style): sidebar on desktop, bottom nav on mobile ----
-  const NAV = [
-    { id: 'forms', label: t('nav.forms'), icon: '📋' },
-    { id: 'keys', label: t('nav.keys'), icon: '🔑' },
-    { id: 'signs', label: t('nav.signs'), icon: '✍️' },
-    { id: 'dict', label: t('nav.dict'), icon: '📖' },
-    { id: 'settings', label: t('nav.settings'), icon: '⚙️' },
-  ];
+  // Buyer builds show only the basic features: forms, signatures, settings.
+  const NAV = BUYER_MODE
+    ? [
+        { id: 'forms', label: t('nav.forms'), icon: '📋' },
+        { id: 'signs', label: t('nav.signs'), icon: '✍️' },
+        { id: 'dict', label: t('nav.dict'), icon: '📖' },
+        { id: 'settings', label: t('nav.settings'), icon: '⚙️' },
+      ]
+    : [
+        { id: 'forms', label: t('nav.forms'), icon: '📋' },
+        { id: 'keys', label: t('nav.keys'), icon: '🔑' },
+        { id: 'signs', label: t('nav.signs'), icon: '✍️' },
+        { id: 'dict', label: t('nav.dict'), icon: '📖' },
+        { id: 'settings', label: t('nav.settings'), icon: '⚙️' },
+      ];
   const FORM_STEPS = [t('steps.upload'), t('steps.review'), t('steps.generate')];
   const userEmail = user.email || '';
 
@@ -760,8 +1003,8 @@ export default function App() {
 
   return (
     <div className="min-h-dvh bg-[#faf9f7] text-zinc-900 dark:bg-slate-950 dark:text-zinc-100 md:flex">
-      {/* Desktop sidebar */}
-      <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-zinc-200/70 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-900 md:flex">
+      {/* Desktop sidebar — locked: sticky so it stays visible while content scrolls */}
+      <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col self-start overflow-y-auto border-r border-zinc-200/70 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-900 md:flex">
         <div className="mb-8 flex items-center gap-2.5 px-2">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-xl text-white shadow-md shadow-emerald-600/30">
             📋
@@ -843,6 +1086,32 @@ export default function App() {
 
         {/* Banners */}
         <div className="no-print mx-auto w-full max-w-6xl space-y-2 px-4 pt-4">
+          {BUYER_MODE && updateInfo && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              <span>🚀 <b>Naya version {updateInfo.version} available hai.</b>{updateInfo.notes ? ' ' + updateInfo.notes : ''}</span>
+              <div className="flex gap-2">
+                <a
+                  href={updateInfo.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-extrabold text-white"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={() => setUpdateInfo(null)}
+                  className="rounded-full px-3 py-1.5 text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-900"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          {BUYER_MODE && licenseState.offline && (
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-semibold text-zinc-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              📴 Offline mode — license cache se chal raha hai.
+            </div>
+          )}
           {notice && (
             <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200">
               <span>✅ {notice}</span>
@@ -873,6 +1142,39 @@ export default function App() {
         <main className="no-print mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-28 md:pb-10">
           {view === 'forms' && (
             <div>
+              {savedBatches.length > 0 && (
+                <div className="mb-5 rounded-3xl bg-blue-50 px-4 py-3 shadow-sm ring-1 ring-blue-100 dark:bg-slate-800 dark:ring-slate-700">
+                  <h3 className="mb-2 text-sm font-bold text-blue-900 dark:text-blue-200">
+                    {lang === 'ur' ? '💾 Save kiye gaye batches' : '💾 Saved batches'}
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                    {savedBatches.map((b) => (
+                      <div key={b.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm dark:bg-slate-900">
+                        <div>
+                          <div className="text-sm font-semibold">{b.name}</div>
+                          <div className="text-xs text-zinc-500">
+                            {b.count} forms · {new Date(b.created).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { loadBatch(b.id); setStep(1); }}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                          >
+                            {lang === 'ur' ? 'Kholein' : 'Open'}
+                          </button>
+                          <button
+                            onClick={() => deleteBatch(b.id)}
+                            className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-200"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <nav
                 className="mb-5 rounded-3xl bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-100 dark:bg-slate-900 dark:ring-slate-800"
                 aria-label="Steps"
@@ -959,6 +1261,9 @@ export default function App() {
                       }}
                       leaveType={leaveType}
                       onLeaveType={setLeaveType}
+                      holidays={holidays}
+                      onHolidays={setHolidays}
+                      apiKeys={apiKeys}
                     />
                   ) : (
                     <ManualEntry
@@ -994,8 +1299,10 @@ export default function App() {
                   lang={lang}
                   forms={printableForms}
                   signatures={signatures}
+                  branding={licenseState.branding || null}
                   onPrint={printHtmlDocument}
                   onDownload={downloadHtmlDocument}
+                  onSave={saveCurrentBatch}
                   onBack={() => setStep(1)}
                   onNewBatch={() => {
                     setForms([]);
@@ -1018,7 +1325,7 @@ export default function App() {
               lang={lang}
               signatures={signatures}
               onChange={setSignatures}
-              userId={user.id}
+              userId={user?.id}
               defaultHrSignUrl={defaultHrSignUrl}
               hrDefaultOff={hrDefaultOff}
               onRemoveDefaultHr={() => setHrDefaultOffPersist(true)}
@@ -1061,6 +1368,32 @@ export default function App() {
           <div className="flex">{NAV.map((n) => navBtn(n, true))}</div>
         </nav>
       </div>
+
+      {/* Floating scroll buttons — all views; hidden when printing; above mobile bottom nav */}
+      {(showScrollTop || showScrollBottom) && (
+        <div className="no-print fixed bottom-20 right-4 z-30 flex flex-col gap-2 md:bottom-6 md:right-6">
+          {showScrollBottom && (
+            <button
+              onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+              title="Neeche jayein"
+              aria-label="Scroll to bottom"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-lg font-bold text-white shadow-lg shadow-emerald-600/30 transition hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+            >
+              ↓
+            </button>
+          )}
+          {showScrollTop && (
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              title="Oopar jayein"
+              aria-label="Scroll to top"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-lg font-bold text-white shadow-lg shadow-emerald-600/30 transition hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+            >
+              ↑
+            </button>
+          )}
+        </div>
+      )}
 
       {busy && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
