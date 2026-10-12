@@ -3,6 +3,7 @@ import { fetchKarachiHolidays } from '../lib/gemini.js';
 import { isConfigured, fetchHolidays, saveHolidays } from '../lib/supabase.js';
 import { hasPin, verifyPin, setPin, clearPin } from '../lib/pin.js';
 import { tr } from '../lib/strings.js';
+import { BUYER_MODE } from '../lib/license.js';
 
 function normalizeDates(raw) {
   const out = [];
@@ -211,7 +212,7 @@ export default function SettingsView({
         {t('settings.title')}
       </h1>
 
-      {localMode && (
+      {localMode && !BUYER_MODE && (
         <section className={card} style={{ borderColor: '#f59e0b' }}>
           <h3 className={h3}>👑 {t('superadmin.title')}</h3>
           <p className="mt-1 text-sm text-zinc-500 dark:text-slate-400">

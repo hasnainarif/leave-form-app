@@ -38,6 +38,9 @@ function geminiUrl(model) {
 
 const BUNCH_SIZE = 20;
 const MAX_CONSEC_FAILS = 3;
+const REQUEST_GAP_MS = 2000; // 2 sec gap between requests per key (rate limit se bachne ke liye)
+const RATE_LIMIT_COOLDOWN_MS = 60000; // 429 par 60 sec cooldown, phir key wapas zinda
+const MAX_KEY_RETRIES = 5; // Har key zyada se zyada 5 dafa cooldown se wapas aaye
 
 function chunk(arr, size) {
   const out = [];
@@ -226,6 +229,8 @@ export async function smartUrduFix(texts, kinds, apiKeys, onProgress) {
   async function worker(keyIdx) {
     const key = keys[keyIdx];
     let consecFails = 0;
+    let cooldowns = 0;
+    let lastCall = 0;
     for (;;) {
       if (deadKeys.has(keyIdx)) return;
       const bunch = queue.shift();
@@ -236,7 +241,13 @@ export async function smartUrduFix(texts, kinds, apiKeys, onProgress) {
         await sleep(80);
         continue;
       }
+      // Rate limit se bachne ke liye har request se pehle gap
+      const sinceLast = Date.now() - lastCall;
+      if (lastCall && sinceLast < REQUEST_GAP_MS) {
+        await sleep(REQUEST_GAP_MS - sinceLast);
+      }
       inFlight += 1;
+      lastCall = Date.now();
       try {
         const arr = await callUrduFixOnce(bunch.items, key);
         bunch.items.forEach((item, j) => {
@@ -247,8 +258,18 @@ export async function smartUrduFix(texts, kinds, apiKeys, onProgress) {
         keyErrors.delete(keyIdx);
         report();
       } catch (e) {
+        const msg = e.message || String(e);
+        const isRateLimit = /429|rate.?limit|resource has been exhausted|quota/i.test(msg);
         consecFails += 1;
-        keyErrors.set(keyIdx, e.message || String(e));
+        keyErrors.set(keyIdx, `Key ${keyIdx + 1}: ${msg}`);
+        if (isRateLimit && cooldowns < MAX_KEY_RETRIES) {
+          // 429: key ko cooldown par bhejo, phir wapas zinda — retry khud hoga
+          cooldowns += 1;
+          consecFails = 0;
+          queue.unshift(bunch); // bunch wapas, koi aur key ya yehi key baad me karegi
+          await sleep(RATE_LIMIT_COOLDOWN_MS);
+          continue;
+        }
         if (consecFails >= MAX_CONSEC_FAILS) {
           // Ye key is run ke liye dead — 3 musalsal nakami ke baad isay
           // mazeed nahi peeta (chahe 1 key ho ya 10). Bunch wapas queue

@@ -198,7 +198,11 @@ export function formStyles(opts = {}) {
   .clf-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding-top: 14px; }
   .clf-balancer { flex: 0 0 62px; width: 62px; }
   .clf-head { flex: 1; text-align: center; }
-  .clf-company { font-weight: 700; font-size: 16px; }
+  .clf-company { font-weight: 700; font-size: 16px;
+    /* Noto Nastaliq me ڈ+ھ alag-alag nazar ata hai (space jesa lagta hai).
+       System font (Jameel/Urdu Typesetting) me لانڈھی aik lafz jur kar
+       ata hai — is liye header line ke liye Noto ko aakhir me rakha. */
+    font-family: 'Jameel Noori Nastaleeq', 'Urdu Typesetting', 'Noto Nastaliq Urdu', serif; }
   .clf-nowrap { white-space: nowrap; }
   .clf-title { font-weight: 700; font-size: 19px; margin: 4px 0 7px; }
   .clf-logo { flex: 0 0 auto; }

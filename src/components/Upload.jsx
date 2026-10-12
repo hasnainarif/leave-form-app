@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { parseFile, detectColumns } from '../lib/excel.js';
 import { tr } from '../lib/strings.js';
+import HolidayCard from './HolidayCard.jsx';
 
 const ACCEPT = '.xlsx,.xls,.csv';
 
@@ -9,7 +10,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear, leaveType = 'sick', onLeaveType }) {
+export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear, leaveType = 'sick', onLeaveType, holidays = [], onHolidays = () => {}, apiKeys = [] }) {
   const t = (k, ...a) => tr(lang, k, ...a);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -176,6 +177,15 @@ export default function Upload({ lang = 'en', onParsed, month, year, onMonthYear
       {error && (
         <p className="mt-2 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
+
+      <HolidayCard
+        lang={lang}
+        month={month}
+        year={year}
+        holidays={holidays}
+        onHolidays={onHolidays}
+        apiKeys={apiKeys}
+      />
 
       <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/60 dark:text-slate-400 sm:text-sm">
         <p className="font-semibold">{t('upload.needCols')}</p>

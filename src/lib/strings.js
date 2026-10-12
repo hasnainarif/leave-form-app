@@ -296,6 +296,16 @@ const en = {
     rerun: 'Fixing names and departments in Urdu with Gemini...',
     rerunFail: 'Smart fix did not run. Local Urdu values are safe.',
   },
+
+  superadmin: {
+    title: 'Superadmin Controls',
+    sub: 'This PC build is yours. No account, no cloud — everything stays on this computer and nothing happens without your switch.',
+    online: 'Online',
+    offline: 'Offline',
+    onlineNote: 'Gemini API is used for Smart Urdu fix.',
+    offlineNote: 'Zero internet. Dictionary + local rules only.',
+    modePill: 'Network mode — tap to change in Settings',
+  },
 };
 
 const ur = {
@@ -588,16 +598,6 @@ const ur = {
     modePill: 'Network mode — Settings me ja kar badlein',
   },
 
-  superadmin: {
-    title: 'Superadmin Controls',
-    sub: 'This PC build is yours. No account, no cloud — everything stays on this computer and nothing happens without your switch.',
-    online: 'Online',
-    offline: 'Offline',
-    onlineNote: 'Gemini API is used for Smart Urdu fix.',
-    offlineNote: 'Zero internet. Dictionary + local rules only.',
-    modePill: 'Network mode — tap to change in Settings',
-  },
-
   busy: {
     working: 'Kaam ho raha hai...',
     parsing: 'File parh li. Urdu tayyar ki ja rahi hai...',
@@ -621,10 +621,10 @@ export function tr(lang, path, ...args) {
   let v = table;
   for (const p of parts) v = v && v[p];
   if (typeof v === 'function') return v(...args);
-  if (typeof v === 'string') return v;
+  if (typeof v === 'string' || Array.isArray(v)) return v;
   const fb = STRINGS.en;
   v = fb;
   for (const p of parts) v = v && v[p];
   if (typeof v === 'function') return v(...args);
-  return typeof v === 'string' ? v : path;
+  return typeof v === 'string' || Array.isArray(v) ? v : path;
 }

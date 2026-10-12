@@ -24,34 +24,40 @@ function toFormData(f) {
   };
 }
 
-function safeRenderForm(data, placements, logoDataUrl) {
+function safeRenderForm(data, placements, logoDataUrl, branding) {
   try {
-    return renderForm(data, placements, logoDataUrl);
+    return renderForm(data, placements, logoDataUrl, branding);
   } catch (e) {
     return '<div style="padding:24px;font-family:sans-serif;color:#b91c1c">Ye form render nahi ho saka.</div>';
   }
 }
 
-// Crown logo (public/crown-logo.png, cleaned from the user's paper form).
-// Fetched respecting the vite base path and turned into a data URL so the
-// downloaded printable file stays self-contained. On any failure it stays
-// null and renderForm renders the styled Urdu text fallback instead.
-function useLogoDataUrl() {
-  const [logoDataUrl, setLogoDataUrl] = useState(null);
+// Crown logo — hardcoded base64, always works (no import/fetch that can fail).
+import { CROWN_LOGO_DATA_URL } from '../lib/crownLogo.js';
+function useLogoDataUrl(src = 'crown-logo.png') {
+  // Default Crown logo: use the embedded base64 — no fetch needed.
+  const [logoDataUrl, setLogoDataUrl] = useState(
+    !src || src === 'crown-logo.png' ? CROWN_LOGO_DATA_URL : null
+  );
   useEffect(() => {
+    // Default Crown logo is already embedded at build time — no fetch needed.
+    if (!src || src === 'crown-logo.png') return;
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(import.meta.env.BASE_URL + 'crown-logo.png');
+        // Absolute URLs (buyer branding logos) are fetched directly;
+        // relative paths resolve against the app base.
+        const url = /^https?:\/\//.test(src) ? src : import.meta.env.BASE_URL + src;
+        const res = await fetch(url);
         if (!res.ok) return;
         const blob = await res.blob();
-        const url = await new Promise((resolve, reject) => {
+        const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         });
-        if (alive && typeof url === 'string') setLogoDataUrl(url);
+        if (alive && typeof dataUrl === 'string') setLogoDataUrl(dataUrl);
       } catch (e) {
         // keep null; the Urdu text fallback renders
       }
@@ -59,7 +65,7 @@ function useLogoDataUrl() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [src]);
   return logoDataUrl;
 }
 
@@ -121,40 +127,17 @@ function ScaledPreview({ html }) {
   );
 }
 
-export default function Generate({ lang = 'en', forms, signatures, onPrint, onDownload, onBack, onNewBatch = () => {} }) {
+export default function Generate({ lang = 'en', forms, signatures, onPrint, onDownload, onSave, onBack, onNewBatch = () => {}, branding = null }) {
   const t = (k, ...a) => tr(lang, k, ...a);
-  const logoDataUrl = useLogoDataUrl();
+  // Buyer branding: use the license's logo when provided, else the Crown logo.
+  const logoSrc = (branding && branding.logoUrl) || 'crown-logo.png';
+  const logoDataUrl = useLogoDataUrl(logoSrc);
   // Print settings: font + page layout, both with old/new choice. Remembered.
-  const [printFont, setPrintFont] = useState(() => {
-    try {
-      return localStorage.getItem('crown-leave-print-font') === 'old' ? 'old' : 'new';
-    } catch (e) {
-      return 'new';
-    }
-  });
-  const [printLayout, setPrintLayout] = useState(() => {
-    try {
-      return localStorage.getItem('crown-leave-print-layout') === 'old' ? 'old' : 'new';
-    } catch (e) {
-      return 'new';
-    }
-  });
-  const changePrintFont = (v) => {
-    setPrintFont(v);
-    try {
-      localStorage.setItem('crown-leave-print-font', v);
-    } catch (e) {
-      /* ignore */
-    }
-  };
-  const changePrintLayout = (v) => {
-    setPrintLayout(v);
-    try {
-      localStorage.setItem('crown-leave-print-layout', v);
-    } catch (e) {
-      /* ignore */
-    }
-  };
+  const [printFont] = useState('new');
+  const [printLayout] = useState('new');
+  // Save dialog (window.prompt Electron me kaam nahi karta — custom modal)
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
   const styleOpts = { font: printFont, layout: printLayout };
   const valid = useMemo(() => (forms || []).filter((f) => f._valid), [forms]);
   const skipped = (forms || []).length - valid.length;
@@ -165,33 +148,10 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
   const ruleCount = (signatures || []).length;
 
   const formsHTML = useMemo(
-    () => valid.map((f) => safeRenderForm(toFormData(f), f.sigPlacements || [], logoDataUrl)),
-    [valid, logoDataUrl]
+    () => valid.map((f) => safeRenderForm(toFormData(f), f.sigPlacements || [], logoDataUrl, branding)),
+    [valid, logoDataUrl, branding]
   );
   const docHTML = useMemo(() => safeBuildDocument(formsHTML, styleOpts), [formsHTML, printFont, printLayout]);
-
-  const toggleRow = (label, value, onChange, options) => (
-    <div className="flex items-center gap-2">
-      <span className="w-24 shrink-0 text-xs font-bold text-slate-600 dark:text-slate-300">{label}</span>
-      <div className="flex flex-1 gap-2">
-        {options.map(([id, text]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onChange(id)}
-            className={
-              'min-h-[40px] flex-1 rounded-lg border px-2 text-xs font-bold transition ' +
-              (value === id
-                ? 'border-emerald-600 bg-emerald-600 text-white'
-                : 'border-slate-300 bg-white text-slate-600 hover:border-emerald-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300')
-            }
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
@@ -222,6 +182,16 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
             {t('generate.download')}
           </button>
           <button
+            onClick={() => {
+              setSaveName(`Batch ${new Date().toLocaleDateString()}`);
+              setSaveOpen(true);
+            }}
+            disabled={valid.length === 0}
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {lang === 'ur' ? '💾 Save karein' : '💾 Save for later'}
+          </button>
+          <button
             onClick={onBack}
             className="rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 hover:bg-zinc-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
@@ -237,19 +207,6 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
         <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
           {t('generate.printNote')}
         </p>
-        <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800/60">
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-            {t('generate.printSettings')}
-          </p>
-          {toggleRow(t('generate.fontLabel'), printFont, changePrintFont, [
-            ['new', t('generate.fontNew')],
-            ['old', t('generate.fontOld')],
-          ])}
-          {toggleRow(t('generate.layoutLabel'), printLayout, changePrintLayout, [
-            ['new', t('generate.layoutNew')],
-            ['old', t('generate.layoutOld')],
-          ])}
-        </div>
       </section>
 
       {valid.length === 0 ? (
@@ -262,6 +219,36 @@ export default function Generate({ lang = 'en', forms, signatures, onPrint, onDo
           {formsHTML.map((html, i) => (
             <ScaledPreview key={(valid[i] && valid[i].id) || i} html={html} />
           ))}
+        </div>
+      )}
+
+      {saveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSaveOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold">{lang === 'ur' ? 'Batch ka naam likhein' : 'Name this batch'}</h3>
+            <input
+              autoFocus
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { onSave(saveName || undefined); setSaveOpen(false); } }}
+              className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+              placeholder={lang === 'ur' ? 'Batch ka naam' : 'Batch name'}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setSaveOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-600"
+              >
+                {lang === 'ur' ? 'Cancel' : 'Cancel'}
+              </button>
+              <button
+                onClick={() => { onSave(saveName || undefined); setSaveOpen(false); }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                {lang === 'ur' ? 'Save karein' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

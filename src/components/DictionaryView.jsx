@@ -112,7 +112,7 @@ export default function DictionaryView({ lang = 'en', customRows = [], onCustomC
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm(t('dict.confirmDelete'))) return;
+    // window.confirm Electron me kaam nahi karta — direct delete
     setError('');
     const ok = await deleteDictionaryEntry(id);
     if (!ok) {
